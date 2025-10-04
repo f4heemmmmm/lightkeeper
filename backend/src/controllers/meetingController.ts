@@ -1,4 +1,5 @@
 import Meeting from '../models/Meeting';
+import Task from '../models/Task';
 import { Request, Response } from 'express'; 
 import { analyzeMeetingNotes } from '../services/openaiService';
 
@@ -86,9 +87,132 @@ export const createMeeting = async (req: Request, res: Response): Promise<void> 
         });
 
         const savedMeeting = await newMeeting.save();
+
+        // Automatically create tasks from action items
+        console.log('Action items from AI analysis:', analysis.actionItems);
+        console.log('Action items count:', analysis.actionItems?.length || 0);
+        
+        if (analysis.actionItems && analysis.actionItems.length > 0) {
+            console.log('Creating tasks from action items:', analysis.actionItems.length);
+            
+            const tasks = analysis.actionItems.map((actionItem, index) => {
+                console.log(`Processing action item ${index + 1}:`, actionItem);
+                
+                // Set due date to 7 days from now by default
+                const dueDate = new Date();
+                dueDate.setDate(dueDate.getDate() + 7);
+                
+                const task = new Task({
+                    title: actionItem.length > 100 ? actionItem.substring(0, 97) + '...' : actionItem,
+                    description: `Task created from meeting: "${savedMeeting.title}"\n\nOriginal action item: ${actionItem}`,
+                    priority: 'medium',
+                    dueDate: dueDate,
+                    assignedTo: null,
+                    isPrivate: false,
+                    createdBy: user.id,
+                    status: 'pending'
+                });
+                
+                console.log(`Created task object ${index + 1}:`, {
+                    title: task.title,
+                    description: task.description.substring(0, 100) + '...',
+                    createdBy: task.createdBy
+                });
+                
+                return task;
+            });
+
+            try {
+                const createdTasks = await Task.insertMany(tasks);
+                console.log(`Successfully created ${createdTasks.length} tasks from action items`);
+                console.log('Created task IDs:', createdTasks.map((t: any) => t._id));
+            } catch (taskError) {
+                console.error('Error creating tasks from action items:', taskError);
+                // Don't fail the meeting creation if task creation fails
+            }
+        }
+
         res.status(201).json(savedMeeting);
     } catch (error: any) {
         res.status(400).json({ message: 'Error creating meeting', error: error.message });
+    }
+};
+
+/**
+ * Create tasks from action items for existing meetings (migration function)
+ */
+export const createTasksFromExistingMeetings = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const user = (req as any).user;
+        
+        if (user.role !== 'organisation') {
+            res.status(403).json({ message: 'Only organisation users can run this migration' });
+            return;
+        }
+
+        // Find all meetings with action items that don't have corresponding tasks
+        const meetings = await Meeting.find({ 
+            actionItems: { $exists: true, $ne: [] },
+            uploadedBy: user.id 
+        });
+
+        let totalTasksCreated = 0;
+        const results = [];
+
+        for (const meeting of meetings) {
+            if (meeting.actionItems && meeting.actionItems.length > 0) {
+                console.log(`Processing meeting: ${meeting.title} with ${meeting.actionItems.length} action items`);
+                
+                // Check if tasks already exist for this meeting
+                const existingTasks = await Task.find({
+                    description: { $regex: `Task created from meeting: "${meeting.title}"` }
+                });
+
+                if (existingTasks.length > 0) {
+                    console.log(`Tasks already exist for meeting: ${meeting.title}`);
+                    continue;
+                }
+
+                const tasks = meeting.actionItems.map((actionItem) => {
+                    const dueDate = new Date();
+                    dueDate.setDate(dueDate.getDate() + 7);
+                    
+                    return new Task({
+                        title: actionItem.length > 100 ? actionItem.substring(0, 97) + '...' : actionItem,
+                        description: `Task created from meeting: "${meeting.title}"\n\nOriginal action item: ${actionItem}`,
+                        priority: 'medium',
+                        dueDate: dueDate,
+                        assignedTo: null,
+                        isPrivate: false,
+                        createdBy: user.id,
+                        status: 'pending'
+                    });
+                });
+
+                try {
+                    const createdTasks = await Task.insertMany(tasks);
+                    totalTasksCreated += createdTasks.length;
+                    results.push({
+                        meetingId: meeting._id,
+                        meetingTitle: meeting.title,
+                        tasksCreated: createdTasks.length
+                    });
+                    console.log(`Created ${createdTasks.length} tasks for meeting: ${meeting.title}`);
+                } catch (taskError) {
+                    console.error(`Error creating tasks for meeting ${meeting.title}:`, taskError);
+                }
+            }
+        }
+
+        res.status(200).json({
+            message: `Migration completed. Created ${totalTasksCreated} tasks from ${results.length} meetings.`,
+            totalTasksCreated,
+            meetingsProcessed: results.length,
+            results
+        });
+    } catch (error: any) {
+        console.error('Error in migration:', error);
+        res.status(500).json({ message: 'Error running migration', error: error.message });
     }
 };
 

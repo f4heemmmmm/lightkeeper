@@ -749,7 +749,74 @@ export default function TaskDetailModal({
                                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
                                         Assigned To
                                     </p>
-                                    {task.assignedTo ? (
+                                    {isEditingTask && userRole === "organisation" ? (
+                                        // Edit mode - show assignment controls
+                                        <div className="space-y-3">
+                                            {task.assignedTo ? (
+                                                <div className="bg-white/5 border border-white/10 rounded-md p-3">
+                                                    <p className="text-sm font-medium text-gray-200">
+                                                        {task.assignedTo.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {task.assignedTo.email}
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-gray-500 italic">
+                                                    Not assigned yet
+                                                </p>
+                                            )}
+                                            
+                                            {/* Assignment Controls */}
+                                            <div className="space-y-2">
+                                                <select
+                                                    value={selectedMemberId}
+                                                    onChange={(e) =>
+                                                        setSelectedMemberId(
+                                                            e.target.value
+                                                        )
+                                                    }
+                                                    className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                                                >
+                                                    <option value="">
+                                                        {task.assignedTo ? "Change assignment..." : "Select a member..."}
+                                                    </option>
+                                                    {members.map((member) => (
+                                                        <option
+                                                            key={member._id}
+                                                            value={member._id}
+                                                            className="bg-black"
+                                                        >
+                                                            {member.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                
+                                                <div className="flex gap-2">
+                                                    {selectedMemberId && (
+                                                        <button
+                                                            onClick={handleAssign}
+                                                            className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                        >
+                                                            <UserCheck className="w-4 h-4" />
+                                                            {task.assignedTo ? "Reassign" : "Assign"}
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {task.assignedTo && onUnassign && (
+                                                        <button
+                                                            onClick={() => onUnassign(task._id)}
+                                                            className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                        >
+                                                            <UserMinus className="w-4 h-4" />
+                                                            Unassign
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : task.assignedTo ? (
+                                        // View mode - show current assignee
                                         <div className="bg-white/5 border border-white/10 rounded-md p-3">
                                             <p className="text-sm font-medium text-gray-200">
                                                 {task.assignedTo.name}
@@ -760,6 +827,7 @@ export default function TaskDetailModal({
                                         </div>
                                     ) : userRole === "organisation" &&
                                       onAssign ? (
+                                        // View mode - show assignment option
                                         <div className="space-y-2">
                                             <select
                                                 value={selectedMemberId}

@@ -1,8 +1,17 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
-import { Upload, FileText, ChevronRight, LogOut, X } from "lucide-react";
-import MeetingDetailModal from "@/components/MeetingDetailModal";
+import { useState, useEffect } from "react";
+import {
+    Upload,
+    FileText,
+    Trash2,
+    ChevronRight,
+    LogOut,
+    X,
+    CheckSquare,
+    RotateCcw,
+} from "lucide-react";
 
 interface User {
     id: string;
@@ -69,6 +78,7 @@ export default function MeetingsPage() {
     );
     const [showDetailModal, setShowDetailModal] = useState(false);
     const [fileContent, setFileContent] = useState<string>("");
+    const [isMigrating, setIsMigrating] = useState(false);
     const [isLoadingContent, setIsLoadingContent] = useState(false);
 
     const getAuthHeader = (): Record<string, string> => {
@@ -276,6 +286,37 @@ export default function MeetingsPage() {
         });
     };
 
+    const handleMigrateTasks = async (): Promise<void> => {
+        if (!confirm('This will create tasks from action items in all your existing meetings. Continue?')) {
+            return;
+        }
+
+        setIsMigrating(true);
+        try {
+            const response = await axios.post(
+                `${API_URL}/api/meetings/migrate-tasks`,
+                {},
+                {
+                    headers: getAuthHeader(),
+                }
+            );
+
+            const result = response.data;
+            alert(`Migration completed!\n\nCreated ${result.totalTasksCreated} tasks from ${result.meetingsProcessed} meetings.`);
+            
+            // Refresh the meetings list
+            fetchMeetings();
+        } catch (err) {
+            const axiosError = err as AxiosError<ErrorResponse>;
+            setError(
+                axiosError.response?.data?.message || "Failed to migrate tasks"
+            );
+            console.error("Error migrating tasks:", err);
+        } finally {
+            setIsMigrating(false);
+        }
+    };
+
     if (!user) {
         return null;
     }
@@ -349,12 +390,37 @@ export default function MeetingsPage() {
                 </div>
             )}
 
+            {/* Stats and Migration */}
             <div className="max-w-7xl mx-auto px-8 py-8">
-                <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-                    <p className="text-gray-400 text-md mb-1 font-semibold">
-                        Total Meetings
-                    </p>
-                    <p className="text-4xl font-thin">{meetings.length}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white/5 border border-white/10 rounded-lg p-6">
+                        <p className="text-gray-400 text-md mb-1 font-semibold">
+                            Total Meetings
+                        </p>
+                        <p className="text-4xl font-thin">{meetings.length}</p>
+                    </div>
+                    {user.role === "organisation" && (
+                        <div className="bg-white/5 border border-white/10 rounded-lg p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-gray-400 text-md mb-1 font-semibold">
+                                        Migrate Tasks
+                                    </p>
+                                    <p className="text-sm text-gray-500">
+                                        Create tasks from existing meeting action items
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleMigrateTasks}
+                                    disabled={isMigrating}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                >
+                                    <RotateCcw className="w-4 h-4" />
+                                    {isMigrating ? "Migrating..." : "Migrate"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
