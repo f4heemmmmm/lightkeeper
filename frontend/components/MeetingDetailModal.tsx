@@ -41,7 +41,7 @@ export default function MeetingDetailModal({
                     {" "}
                     {/* Header */}
                     <div className="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
-                        <h2 className="text-2xl font-semibold">
+                        <h2 className="text-2xl font-semibold text-white">
                             {meeting.title}
                         </h2>
                         <div className="flex items-center gap-2">
@@ -54,7 +54,7 @@ export default function MeetingDetailModal({
                             </button>
                             <button
                                 onClick={onClose}
-                                className="p-2 rounded-md hover:bg-white/10 transition-colors"
+                                className="p-2 rounded-md hover:bg-white/10 transition-colors text-white"
                             >
                                 <X className="w-5 h-5" />
                             </button>
