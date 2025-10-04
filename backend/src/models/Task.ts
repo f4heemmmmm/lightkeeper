@@ -5,7 +5,7 @@ export interface ITask extends Document {
     description: string;
     priority: 'low' | 'medium' | 'high';
     status: 'pending' | 'completed';
-    dueDate: Date;
+    dueDate?: Date | null;
     assignedTo?: mongoose.Types.ObjectId | null;
     isPrivate: boolean;
     createdBy: mongoose.Types.ObjectId;
@@ -37,10 +37,11 @@ const taskSchema = new Schema<ITask>(
             enum: ['pending', 'completed'],
             default: 'pending'
         },
-        dueDate: {
-            type: Date,
-            required: [true, 'Due date is required']
-        },
+    dueDate: {
+        type: Date,
+        required: false,
+        default: null
+    },
         assignedTo: {
             type: Schema.Types.ObjectId,
             ref: 'User',
