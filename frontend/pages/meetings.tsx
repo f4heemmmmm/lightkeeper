@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
-import { useState, useEffect } from "react";
 import {
     Upload,
     FileText,
@@ -287,7 +286,11 @@ export default function MeetingsPage() {
     };
 
     const handleMigrateTasks = async (): Promise<void> => {
-        if (!confirm('This will create tasks from action items in all your existing meetings. Continue?')) {
+        if (
+            !confirm(
+                "This will create tasks from action items in all your existing meetings. Continue?"
+            )
+        ) {
             return;
         }
 
@@ -302,8 +305,10 @@ export default function MeetingsPage() {
             );
 
             const result = response.data;
-            alert(`Migration completed!\n\nCreated ${result.totalTasksCreated} tasks from ${result.meetingsProcessed} meetings.`);
-            
+            alert(
+                `Migration completed!\n\nCreated ${result.totalTasksCreated} tasks from ${result.meetingsProcessed} meetings.`
+            );
+
             // Refresh the meetings list
             fetchMeetings();
         } catch (err) {
@@ -407,7 +412,8 @@ export default function MeetingsPage() {
                                         Migrate Tasks
                                     </p>
                                     <p className="text-sm text-gray-500">
-                                        Create tasks from existing meeting action items
+                                        Create tasks from existing meeting
+                                        action items
                                     </p>
                                 </div>
                                 <button

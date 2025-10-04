@@ -4,6 +4,11 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+export interface OrganizationMember {
+    name: string;
+    email: string;
+}
+
 export interface MeetingAnalysis {
     title: string;
     description: string;
@@ -14,11 +19,55 @@ export interface MeetingAnalysis {
 /**
  * Analyze meeting notes/transcript using OpenAI to extract structured information
  */
-export const analyzeMeetingNotes = async (content: string): Promise<MeetingAnalysis> => {
+export const analyzeMeetingNotes = async (
+    content: string,
+    organizationMembers?: OrganizationMember[]
+): Promise<MeetingAnalysis> => {
     try {
+        // Build the member context for the AI
+        const hasMemberContext = organizationMembers && organizationMembers.length > 0;
+        const memberList = hasMemberContext 
+            ? organizationMembers.map(m => `- ${m.name} (${m.email})`).join('\n')
+            : '';
+
+        const memberFilteringInstruction = hasMemberContext ? `
+
+### CRITICAL: ORGANIZATION MEMBER FILTERING ###
+
+**ONLY extract action items for these organization members:**
+${memberList}
+
+**FILTERING RULES:**
+1. **Speaker Identification**: Carefully identify who is being assigned each task in the transcript
+2. **Name Matching**: Match speaker names/identifiers to the organization members list above
+   - Look for first names, last names, full names, or email addresses
+   - Be flexible with variations (e.g., "John" matches "John Smith")
+   - Check for informal names or nicknames that might refer to organization members
+3. **EXCLUDE external participants**: If a task is assigned to someone NOT in the organization member list, DO NOT include it as an action item
+4. **Unknown assignments**: If you cannot determine who a task is for, or if it's clearly for someone outside the organization, EXCLUDE it
+5. **Group tasks**: If a task says "we" or "the team", only include it if it's clear organization members are involved
+6. **Verification**: Before including each action item, verify the assignee is in the organization member list
+
+**Example Decision Process:**
+- Transcript says: "Sarah will send the proposal to the client"
+- Check: Is "Sarah" in the organization member list?
+- YES → Include: "Sarah will send the proposal to the client"
+- NO → EXCLUDE this action item
+
+- Transcript says: "John from Acme Corp will review the contract"  
+- Check: Is "John" in the organization member list?
+- NO (external vendor) → EXCLUDE this action item
+
+**FORMAT for organization action items:**
+When an organization member has an action item, format as:
+"[Member Name] will [action] by [deadline]"
+
+This ensures you only track tasks for YOUR team members, not external participants.` : '';
+
         const systemPrompt = `### Instruction ###
 You are an AI assistant specialized in analyzing meeting transcripts and notes. 
 Your task is to extract and structure key information into a JSON object.
+${memberFilteringInstruction}
 
 ### Requirements ###
 1. Generate output in valid JSON with the following structure:
@@ -26,7 +75,7 @@ Your task is to extract and structure key information into a JSON object.
   "title": "string, max 100 characters",
   "description": "string, max 500 characters",
   "summary": "string, comprehensive but concise summary of the meeting",
-  "actionItems": ["array of specific, actionable tasks"]
+  "actionItems": ["array of specific, actionable tasks${hasMemberContext ? ' - ONLY for organization members listed above' : ''}"]
 }
 
 2. Extraction priorities:
@@ -39,6 +88,7 @@ Your task is to extract and structure key information into a JSON object.
 
 **CORE PRINCIPLE: When in doubt, include it.**
 Favor recall over precision. It's better to capture an ambiguous commitment than to miss a real one.
+${hasMemberContext ? '\n**CRITICAL OVERRIDE: However, ONLY include tasks for organization members listed above. External participant tasks must be excluded.**\n' : ''}
 
 **PRIMARY COMMITMENT SIGNALS:**
 1. Direct: "I'll...", "I will...", "I'm going to...", "I can..."
@@ -52,6 +102,7 @@ Track commitments that develop across multiple exchanges:
 - Initial mention → Discussion → Someone accepts = ACTION ITEM
 - Question → Exploration → Agreement = ACTION ITEM
 - Problem → Multiple comments → Owner emerges = ACTION ITEM
+${hasMemberContext ? '**VERIFY the owner is an organization member before including**\n' : ''}
 
 Example:
 A: "We need the dashboard updated"
@@ -59,7 +110,7 @@ B: "What changes specifically?"
 A: "Add the new metrics we discussed"
 [5 lines later]
 B: "I can work on that this week"
-→ "Update dashboard with new metrics (Owner: B, Timeline: this week)"
+${hasMemberContext ? '→ Check if B is in organization member list\n→ If YES: "Update dashboard with new metrics (Owner: B, Timeline: this week)"\n→ If NO: EXCLUDE this action item\n' : '→ "Update dashboard with new metrics (Owner: B, Timeline: this week)"'}
 
 **REFINED/EVOLVED COMMITMENTS:**
 When a task gets refined in conversation, capture the FINAL scope:
@@ -67,6 +118,7 @@ A: "Can you email them?"
 B: "Sure"
 A: "And include the pricing breakdown"
 → "Email with pricing breakdown" (not just "email them")
+${hasMemberContext ? '**But only if B is an organization member**\n' : ''}
 
 **IMPLICIT DEADLINE PATTERNS:**
 - "before next meeting" → Check if meeting date mentioned elsewhere
@@ -77,19 +129,17 @@ A: "And include the pricing breakdown"
 **CONDITIONAL/DEPENDENT ACTIONS:**
 Extract BOTH actions:
 "After John sends the report, Sarah will review it"
-→ Two action items:
-1. "John will send the report"
-2. "Sarah will review report (after receiving from John)"
+${hasMemberContext ? '→ Check BOTH John and Sarah against organization member list\n→ Only include action items for those who ARE organization members\n' : '→ Two action items:\n1. "John will send the report"\n2. "Sarah will review report (after receiving from John)"'}
 
 **PARKING LOT WITH COMMITMENT:**
 If something is "parked" but someone commits to follow up:
 "Let's park the redesign discussion, but I'll send you those mockups anyway"
-→ "Send redesign mockups" (IS an action item)
+${hasMemberContext ? '→ Check if speaker is organization member\n→ If YES: "Send redesign mockups" (IS an action item)\n' : '→ "Send redesign mockups" (IS an action item)'}
 
 **GROUP/UNASSIGNED TASKS:**
 If task is clear but owner is unclear, still include it:
 "Someone needs to book the conference room"
-→ "Book conference room for [event]" (Owner: TBD)
+${hasMemberContext ? '→ Only if this is clearly a task for the organization (not external parties)\n' : ''}→ "Book conference room for [event]" (Owner: TBD)
 
 **FOLLOW-UP COMMITMENTS:**
 These ARE action items:
@@ -97,17 +147,20 @@ These ARE action items:
 - "Let me check and get back to you"
 - "I'll look into it"
 - "I'll circle back"
+${hasMemberContext ? '**Verify the speaker is an organization member**\n' : ''}
 
 **VERIFICATION COMMITMENTS:**
 These ARE action items:
 - "Let me verify that"
 - "I'll double-check"
 - "I'll confirm with them"
+${hasMemberContext ? '**Verify the speaker is an organization member**\n' : ''}
 
 **THREE-PASS EXTRACTION STRATEGY:**
 
 **Pass 1 - Explicit Commitments:**
 Scan for obvious "I will" statements and direct assignments
+${hasMemberContext ? 'Match each commitment to organization member list\n' : ''}
 
 **Pass 2 - Conversational Commitments:**
 Look for:
@@ -115,6 +168,7 @@ Look for:
 - Problems + solution offers
 - Discussions that conclude with ownership
 - Agreements buried in dialogue
+${hasMemberContext ? 'Identify speakers and verify they are organization members\n' : ''}
 
 **Pass 3 - Fragmented Commitments:**
 Reconstruct commitments from pieces:
@@ -122,13 +176,14 @@ Reconstruct commitments from pieces:
 - Owner identified on line 15
 - Deadline mentioned on line 42
 → Combine into one action item
+${hasMemberContext ? '→ Verify owner is in organization member list before including\n' : ''}
 
 **FINAL CHECKLIST (Run this before outputting):**
 □ Did I scan the ENTIRE transcript, not just sections labeled "action items"?
 □ Did I check for multi-turn commitments that evolved?
 □ Did I look for "I'll follow up" or "I'll check" statements?
 □ Did I capture commitments where someone said "yes/sure/okay" to a request?
-□ Did I include tasks with unclear owners (mark as TBD)?
+${hasMemberContext ? '□ Did I verify EACH action item owner is in the organization member list?\n□ Did I EXCLUDE tasks assigned to external participants?\n' : ''}□ Did I include tasks with unclear owners (mark as TBD)?
 □ Did I combine fragmented information (task + owner + deadline from different parts)?
 □ Did I check for conditional/dependent actions?
 □ When uncertain, did I INCLUDE the item?
@@ -140,6 +195,7 @@ Reconstruct commitments from pieces:
 ✗ Future considerations: "Down the road..." (unless specific commitment made)
 ✗ Aspirational without owner: "We really need to improve X" (no one takes it)
 ✗ Brainstorming without conclusion: "What if..." (no decision reached)
+${hasMemberContext ? '✗ **Tasks assigned to people NOT in the organization member list**\n✗ **External participant commitments**\n' : ''}
 
 **ACTION ITEM FORMAT:**
 Preferred: "[Owner] will [action] by [deadline]"
@@ -149,14 +205,13 @@ Minimum: "[Action]" (only if truly no other context)
 Examples:
 ✓ "Sarah will send budget proposal by Friday"
 ✓ "Follow up with client about contract terms (Owner: John, Deadline: this week)"
-✓ "Schedule Q2 planning meeting (Owner: TBD)"
-✓ "Review design mockups before next Wednesday"
+${hasMemberContext ? '✓ "Schedule Q2 planning meeting (Owner: TBD)" - only if for organization\n' : '✓ "Schedule Q2 planning meeting (Owner: TBD)"\n'}✓ "Review design mockups before next Wednesday"
 
 **QUALITY CHECK:**
 Ask yourself for each potential action item:
 1. Did someone commit to doing this (explicitly or implicitly)?
 2. Is there a specific action (even if small)?
-3. If uncertain: INCLUDE IT (err on the side of capture)
+${hasMemberContext ? '3. **Is the person who committed in the organization member list?**\n4. If uncertain about identity: EXCLUDE IT (err on the side of excluding external tasks)\n' : '3. If uncertain: INCLUDE IT (err on the side of capture)\n'}
 
 ### Other Fields ###
 - "title": Avoid generic titles. Be specific to the meeting's actual purpose
@@ -180,13 +235,14 @@ CRITICAL REMINDER:
 - Read the ENTIRE content from start to finish
 - Action items are often hidden in natural dialogue
 - Track commitments across multiple exchanges
-- When uncertain whether something is an action item, INCLUDE IT
+${hasMemberContext ? `- **ONLY include action items for organization members listed in the system prompt**\n- **EXCLUDE tasks for external participants or people not in the organization**\n` : ''}- When uncertain whether something is an action item, INCLUDE IT
 - Don't just look for "action items" sections - commitments appear throughout
 
 Meeting content:
 
 ${content}`;
 
+        // Rest of the function remains the same...
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
