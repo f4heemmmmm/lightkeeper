@@ -86,6 +86,7 @@ export default function OrganisationHomepage({
     const [draggedTask, setDraggedTask] = useState<Task | null>(null);
     const [dragOverZone, setDragOverZone] = useState<string | null>(null);
     const [priorityFilter, setPriorityFilter] = useState<string>("all");
+    const [sortBy, setSortBy] = useState<string>("default");
     const [newTask, setNewTask] = useState<NewTask>({
         title: "",
         description: "",
@@ -94,19 +95,43 @@ export default function OrganisationHomepage({
         dueTime: "",
     });
 
-    const allTasks = tasks.filter((t) => {
-        const statusMatch = t.status !== "completed";
-        const priorityMatch =
-            priorityFilter === "all" || t.priority === priorityFilter;
-        return statusMatch && priorityMatch;
-    });
+    const sortTasks = (tasksToSort: Task[]): Task[] => {
+        if (sortBy === "default") {
+            return tasksToSort;
+        }
 
-    const completedTasks = tasks.filter((t) => {
-        const statusMatch = t.status === "completed";
-        const priorityMatch =
-            priorityFilter === "all" || t.priority === priorityFilter;
-        return statusMatch && priorityMatch;
-    });
+        const sorted = [...tasksToSort];
+
+        if (sortBy === "dueDate-asc") {
+            sorted.sort(
+                (a, b) =>
+                    new Date(a.dueDate).getTime() -
+                    new Date(b.dueDate).getTime()
+            );
+        } else if (sortBy === "dueDate-desc") {
+            sorted.sort(
+                (a, b) =>
+                    new Date(b.dueDate).getTime() -
+                    new Date(a.dueDate).getTime()
+            );
+        }
+
+        return sorted;
+    };
+
+    const filterAndSortTasks = (status: "pending" | "completed"): Task[] => {
+        const filtered = tasks.filter((t) => {
+            const statusMatch = t.status === status;
+            const priorityMatch =
+                priorityFilter === "all" || t.priority === priorityFilter;
+            return statusMatch && priorityMatch;
+        });
+
+        return sortTasks(filtered);
+    };
+
+    const allTasks = filterAndSortTasks("pending");
+    const completedTasks = filterAndSortTasks("completed");
 
     const createTask = async (): Promise<void> => {
         if (!newTask.title.trim() || !newTask.description.trim()) {
@@ -481,6 +506,8 @@ export default function OrganisationHomepage({
                         setPriorityFilter={setPriorityFilter}
                         activeTasksCount={allTasks.length}
                         completedTasksCount={completedTasks.length}
+                        sortBy={sortBy}
+                        setSortBy={setSortBy}
                     />
                 </div>
 
