@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 
-type PageType = "tasks" | "meetings" | "notetaker";
+type PageType = "tasks" | "meetings" | "notetaker" | "calendar" | "upcoming" | "event-designer";
 
 interface NavigationTabsProps {
     currentPage: PageType;
@@ -46,6 +46,36 @@ export default function NavigationTabs({ currentPage }: NavigationTabsProps) {
                         }`}
                     >
                         AI Notetaker
+                    </button>
+                    <button
+                        onClick={() => navigateToPage("/calendar")}
+                        className={`py-4 transition-colors ${
+                            currentPage === "calendar"
+                                ? "text-white border-b-2 border-white"
+                                : "text-gray-400 hover:text-white"
+                        }`}
+                    >
+                        Calendar
+                    </button>
+                    <button
+                        onClick={() => navigateToPage("/upcoming")}
+                        className={`py-4 transition-colors ${
+                            currentPage === "upcoming"
+                                ? "text-white border-b-2 border-white"
+                                : "text-gray-400 hover:text-white"
+                        }`}
+                    >
+                        Upcoming Events
+                    </button>
+                    <button
+                        onClick={() => navigateToPage("/event-designer")}
+                        className={`py-4 transition-colors ${
+                            currentPage === "event-designer"
+                                ? "text-white border-b-2 border-white"
+                                : "text-gray-400 hover:text-white"
+                        }`}
+                    >
+                        Event Designer
                     </button>
                 </div>
             </div>

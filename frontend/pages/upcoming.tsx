@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
+import AppLayout from "@/components/AppLayout";
 import { useToast } from "@/components/ToastContainer";
 import {
     Calendar,
     FileText,
-    LogOut,
     ChevronRight,
     AlertCircle,
     Clock,
@@ -219,12 +219,6 @@ export default function UpcomingEventsPage() {
         }
     };
 
-    const handleLogout = (): void => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        router.push("/login");
-    };
-
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
         return date.toLocaleDateString("en-US", {
@@ -239,74 +233,7 @@ export default function UpcomingEventsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white">
-            {/* Header */}
-            <div className="border-b border-white/10 p-8">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div>
-                        <h1 className="text-4xl font-light mb-2">
-                            Upcoming Events & Agenda
-                        </h1>
-                        <p className="text-gray-400">
-                            Review follow-ups and generate meeting agendas
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-gray-400 text-sm">
-                            {user.email}
-                        </span>
-                        <button
-                            onClick={handleLogout}
-                            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-sm"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            Logout
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Navigation */}
-            <div className="border-b border-white/10">
-                <div className="max-w-7xl mx-auto px-8">
-                    <div className="flex gap-6">
-                        <button
-                            onClick={() => router.push("/")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Tasks
-                        </button>
-                        <button
-                            onClick={() => router.push("/meetings")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Meetings
-                        </button>
-                        <button
-                            onClick={() => router.push("/notetaker")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            AI Notetaker
-                        </button>
-                        <button
-                            onClick={() => router.push("/calendar")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Calendar
-                        </button>
-                        <button className="py-4 text-white border-b-2 border-white">
-                            Upcoming Events
-                        </button>
-                        <button
-                            onClick={() => router.push("/event-designer")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Event Designer
-                        </button>
-                    </div>
-                </div>
-            </div>
-
+        <AppLayout user={user} currentPage="upcoming">
             {/* Main Content */}
             <div className="max-w-7xl mx-auto px-8 py-8">
                 {isLoading ? (
@@ -427,6 +354,6 @@ export default function UpcomingEventsPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </AppLayout>
     );
 }

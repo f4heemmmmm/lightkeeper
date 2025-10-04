@@ -15,15 +15,14 @@ interface HeaderProps {
 
 export default function Header({ user, pageTitle, onLogout }: HeaderProps) {
     return (
-        <div className="border-b border-white/10 py-8 px-20">
+        <div className="border-b border-white/10 py-6 px-20">
             <div className="max-w-9xl mx-auto flex justify-between items-center">
                 <div>
-                    <h1 className="text-9xl font-thin tracking-tight mb-2">
+                    <h1 className="text-5xl font-light tracking-tight mb-1">
                         Lightkeeper
                     </h1>
-                    <p className="text-gray-400 font-medium alight-right">
-                        {" "}
-                        Keep track of your tasks. Organize your workflow.{" "}
+                    <p className="text-sm text-gray-500">
+                        {pageTitle}
                     </p>
                 </div>
                 <div className="flex items-center gap-4">

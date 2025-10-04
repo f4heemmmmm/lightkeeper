@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
+import AppLayout from "@/components/AppLayout";
 import { useToast } from "@/components/ToastContainer";
 import {
     FileImage,
     Upload,
-    LogOut,
     Sparkles,
     Download,
     Trash2,
@@ -76,6 +76,7 @@ export default function EventDesignerPage() {
     const [revisionMeetingId, setRevisionMeetingId] = useState<string | null>(null);
     const [revisionInstructions, setRevisionInstructions] = useState("");
     const [isRevising, setIsRevising] = useState(false);
+    const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
     const getAuthHeader = (): Record<string, string> => {
         const token = localStorage.getItem("token");
@@ -303,12 +304,6 @@ export default function EventDesignerPage() {
         document.body.removeChild(link);
     };
 
-    const handleLogout = (): void => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        router.push("/login");
-    };
-
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
         return date.toLocaleDateString("en-US", {
@@ -323,70 +318,7 @@ export default function EventDesignerPage() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white">
-            {/* Header */}
-            <div className="border-b border-white/10 p-8">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div>
-                        <h1 className="text-4xl font-light mb-2">Event Designer</h1>
-                        <p className="text-gray-400">
-                            Generate professional marketing materials for your events
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-gray-400 text-sm">{user.email}</span>
-                        <button
-                            onClick={handleLogout}
-                            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-sm"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            Logout
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Navigation */}
-            <div className="border-b border-white/10">
-                <div className="max-w-7xl mx-auto px-8">
-                    <div className="flex gap-6">
-                        <button
-                            onClick={() => router.push("/")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Tasks
-                        </button>
-                        <button
-                            onClick={() => router.push("/meetings")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Meetings
-                        </button>
-                        <button
-                            onClick={() => router.push("/notetaker")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            AI Notetaker
-                        </button>
-                        <button
-                            onClick={() => router.push("/calendar")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Calendar
-                        </button>
-                        <button
-                            onClick={() => router.push("/upcoming")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Upcoming Events
-                        </button>
-                        <button className="py-4 text-white border-b-2 border-white">
-                            Event Designer
-                        </button>
-                    </div>
-                </div>
-            </div>
-
+        <AppLayout user={user} currentPage="event-designer">
             {/* Logo Upload Section */}
             <div className="max-w-7xl mx-auto px-8 py-6">
                 <div className="bg-white/5 border border-white/10 rounded-lg p-6">
@@ -537,12 +469,18 @@ export default function EventDesignerPage() {
                                                                 key={asset._id}
                                                                 className="bg-white/5 border border-white/10 rounded-lg overflow-hidden"
                                                             >
-                                                                <div className="aspect-video bg-white/10 flex items-center justify-center">
+                                                                <div 
+                                                                    className="aspect-video bg-white/10 flex items-center justify-center cursor-pointer hover:bg-white/20 transition-colors group relative"
+                                                                    onClick={() => setExpandedImage(asset.imageData)}
+                                                                >
                                                                     <img
                                                                         src={asset.imageData}
                                                                         alt={asset.assetType}
                                                                         className="w-full h-full object-contain"
                                                                     />
+                                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <p className="text-white text-sm font-medium">Click to expand</p>
+                                                                    </div>
                                                                 </div>
                                                                 <div className="p-4">
                                                                     <div className="flex items-center justify-between mb-2">
@@ -678,6 +616,30 @@ export default function EventDesignerPage() {
                     </div>
                 </div>
             )}
-        </div>
+
+            {/* Expanded Image Modal */}
+            {expandedImage && (
+                <div
+                    className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+                    onClick={() => setExpandedImage(null)}
+                >
+                    <div className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
+                        <button
+                            onClick={() => setExpandedImage(null)}
+                            className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors z-10"
+                            title="Close"
+                        >
+                            <X className="w-6 h-6 text-white" />
+                        </button>
+                        <img
+                            src={expandedImage}
+                            alt="Expanded view"
+                            className="max-w-full max-h-full object-contain"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                </div>
+            )}
+        </AppLayout>
     );
 }

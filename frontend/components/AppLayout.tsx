@@ -10,7 +10,7 @@ interface User {
     role: "organisation" | "member";
 }
 
-type PageType = "tasks" | "meetings" | "notetaker";
+type PageType = "tasks" | "meetings" | "notetaker" | "calendar" | "upcoming" | "event-designer";
 
 interface AppLayoutProps {
     user: User;
@@ -41,6 +41,12 @@ export default function AppLayout({
                 return "Meetings - Upload and manage meeting notes";
             case "notetaker":
                 return "AI Notetaker - Automatically join and transcribe meetings";
+            case "calendar":
+                return "Calendar - View your schedule";
+            case "upcoming":
+                return "Upcoming Events - See what's next";
+            case "event-designer":
+                return "Event Designer - Create and customize events";
             default:
                 return "";
         }

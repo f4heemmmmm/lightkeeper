@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
+import AppLayout from "@/components/AppLayout";
 import { Calendar, dateFnsLocalizer, View } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import "react-big-calendar/lib/css/react-big-calendar.css";
-import { LogOut, Plus, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, Calendar as CalendarIcon } from "lucide-react";
 
 const locales = {
     "en-US": require("date-fns/locale/en-US"),
@@ -196,12 +197,6 @@ export default function CalendarPage() {
         }
     };
 
-    const handleLogout = (): void => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        router.push("/login");
-    };
-
     const eventStyleGetter = (event: CalendarEvent) => {
         let backgroundColor = "#6366f1"; // Default blue
         
@@ -260,75 +255,7 @@ export default function CalendarPage() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white">
-            {/* Header */}
-            <div className="border-b border-white/10 p-8">
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <CalendarIcon className="w-8 h-8" />
-                        <div>
-                            <h1 className="text-2xl font-light">Calendar</h1>
-                            <p className="text-gray-400 text-sm">
-                                View your tasks and events
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-gray-400 text-sm">
-                            {user.email}
-                        </span>
-                        <button
-                            onClick={handleLogout}
-                            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-sm"
-                        >
-                            <LogOut className="w-4 h-4" />
-                            Logout
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Navigation Tabs */}
-            <div className="border-b border-white/10">
-                <div className="max-w-7xl mx-auto px-8">
-                    <div className="flex gap-6">
-                        <button
-                            onClick={() => router.push("/")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Tasks
-                        </button>
-                        <button
-                            onClick={() => router.push("/meetings")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Meetings
-                        </button>
-                        <button
-                            onClick={() => router.push("/notetaker")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            AI Notetaker
-                        </button>
-                        <button className="py-4 text-white border-b-2 border-white">
-                            Calendar
-                        </button>
-                        <button
-                            onClick={() => router.push("/upcoming")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Upcoming Events
-                        </button>
-                        <button
-                            onClick={() => router.push("/event-designer")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Event Designer
-                        </button>
-                    </div>
-                </div>
-            </div>
-
+        <AppLayout user={user} currentPage="calendar">
             {/* Error Message */}
             {error && (
                 <div className="max-w-7xl mx-auto px-8 pt-4">
@@ -559,7 +486,7 @@ export default function CalendarPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </AppLayout>
     );
 }
 
