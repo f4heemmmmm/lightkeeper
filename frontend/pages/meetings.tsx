@@ -158,7 +158,7 @@ export default function MeetingsPage() {
                     fileUrl: dataUrl,
                     fileName: selectedFile.name,
                     fileSize: selectedFile.size,
-                    fileContent: content,
+                    fileContent: dataUrl, // Send the same base64 data URL
                 },
                 { headers: getAuthHeader() }
             );

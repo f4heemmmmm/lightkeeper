@@ -63,7 +63,9 @@ export const createMeeting = async (req: Request, res: Response): Promise<void> 
             return;
         }
 
-        const decodedContent = decodeFileContent(fileContent);
+        const decodedContent = fileContent.startsWith('data:') 
+            ? decodeFileContent(fileContent)
+            : fileContent; // Use raw content if not base64
         let analysis;
         
         try {
