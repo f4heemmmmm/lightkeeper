@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
+import MeetingDetailModal from "@/components/MeetingDetailModal";
+
 import {
     Upload,
     FileText,
