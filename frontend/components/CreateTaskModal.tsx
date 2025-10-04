@@ -64,7 +64,7 @@ export default function CreateTaskModal({
 
     const validateDueDate = (value: string): string => {
         if (!value) {
-            return "Due date is required";
+            return ""; // Date is now optional
         }
         const selectedDate = new Date(value);
         const today = new Date();
@@ -84,12 +84,18 @@ export default function CreateTaskModal({
     };
 
     const validateDueTime = (value: string): string => {
-        if (!value) {
-            return "Due time is required";
+        // Time is optional if no date is set
+        if (!value && !newTask.dueDate) {
+            return "";
+        }
+
+        // If date is set, time should be provided
+        if (newTask.dueDate && !value) {
+            return "Due time is required when date is set";
         }
 
         // Check if datetime is in the past
-        if (newTask.dueDate) {
+        if (newTask.dueDate && value) {
             const datetime = new Date(`${newTask.dueDate}T${value}`);
             const now = new Date();
 
@@ -319,7 +325,7 @@ export default function CreateTaskModal({
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-400 mb-2.5 uppercase tracking-wider">
-                                Due Date
+                                Due Date <span className="text-gray-500 text-[10px] normal-case">(Optional)</span>
                             </label>
                             <input
                                 type="date"
@@ -364,7 +370,7 @@ export default function CreateTaskModal({
 
                         <div>
                             <label className="block text-xs font-semibold text-gray-400 mb-2.5 uppercase tracking-wider">
-                                Due Time
+                                Due Time <span className="text-gray-500 text-[10px] normal-case">(Optional)</span>
                             </label>
                             <input
                                 type="time"

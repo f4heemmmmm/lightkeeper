@@ -136,3 +136,104 @@ export const downloadTranscript = async (transcriptUrl: string): Promise<string>
         throw new Error(`Failed to download transcript: ${error.response?.data?.message || error.message}`);
     }
 };
+
+export interface NylasEmail {
+    id: string;
+    grant_id: string;
+    subject: string;
+    from: Array<{ email: string; name?: string }>;
+    to: Array<{ email: string; name?: string }>;
+    date: number; // Unix timestamp
+    body?: string;
+    snippet?: string;
+}
+
+/**
+ * Fetch emails from a specific grant (email account)
+ * @param grantId - The Nylas grant ID for the email account
+ * @param limit - Maximum number of emails to fetch (default: 50)
+ * @param receivedAfter - Unix timestamp to fetch emails received after this time
+ */
+export const fetchEmails = async (
+    grantId: string,
+    limit: number = 50,
+    receivedAfter?: number
+): Promise<NylasEmail[]> => {
+    try {
+        console.log('[Nylas] Fetching emails...');
+        console.log('[Nylas] Grant ID:', grantId);
+        console.log('[Nylas] Limit:', limit);
+        console.log('[Nylas] Received After:', receivedAfter ? new Date(receivedAfter * 1000).toISOString() : 'Not set');
+        
+        const params: any = {
+            limit,
+        };
+        
+        if (receivedAfter) {
+            params.received_after = receivedAfter;
+        }
+
+        const url = `${NYLAS_API_URL}/v3/grants/${grantId}/messages`;
+        console.log('[Nylas] API URL:', url);
+        console.log('[Nylas] Params:', JSON.stringify(params));
+
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `Bearer ${NYLAS_API_KEY}`,
+            },
+            params,
+        });
+
+        const emails = response.data.data || [];
+        console.log(`[Nylas]  Successfully fetched ${emails.length} emails`);
+        
+        if (emails.length > 0) {
+            console.log('[Nylas] First email:', {
+                id: emails[0].id,
+                subject: emails[0].subject,
+                date: new Date(emails[0].date * 1000).toISOString()
+            });
+        }
+
+        return emails;
+    } catch (error: any) {
+        console.error('[Nylas]  Error fetching emails:');
+        console.error('[Nylas] Status:', error.response?.status);
+        console.error('[Nylas] Status Text:', error.response?.statusText);
+        console.error('[Nylas] Response Data:', JSON.stringify(error.response?.data, null, 2));
+        console.error('[Nylas] Error Message:', error.message);
+        console.error('[Nylas] Full error:', error);
+        throw new Error(`Failed to fetch emails: ${error.response?.data?.message || error.message}`);
+    }
+};
+
+/**
+ * Fetch a single email with full details including body
+ * @param grantId - The Nylas grant ID for the email account
+ * @param messageId - The message ID to fetch
+ */
+export const fetchEmailById = async (
+    grantId: string,
+    messageId: string
+): Promise<NylasEmail> => {
+    try {
+        console.log('[Nylas] Fetching email by ID:', messageId);
+        
+        const url = `${NYLAS_API_URL}/v3/grants/${grantId}/messages/${messageId}`;
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `Bearer ${NYLAS_API_KEY}`,
+            },
+        });
+
+        console.log('[Nylas]  Successfully fetched email details');
+        return response.data.data;
+    } catch (error: any) {
+        console.error('[Nylas]  Error fetching email by ID:');
+        console.error('[Nylas] Message ID:', messageId);
+        console.error('[Nylas] Status:', error.response?.status);
+        console.error('[Nylas] Response Data:', JSON.stringify(error.response?.data, null, 2));
+        console.error('[Nylas] Error Message:', error.message);
+        throw new Error(`Failed to fetch email: ${error.response?.data?.message || error.message}`);
+    }
+};

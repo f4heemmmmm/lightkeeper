@@ -9,12 +9,21 @@ import chatRoutes from "./src/routes/chatRoutes";
 import commentRoutes from "./src/routes/commentRoutes";
 import meetingRoutes from "./src/routes/meetingRoutes";
 import notetakerRoutes from "./src/routes/notetakerRoutes";
+import emailRoutes from "./src/routes/emailRoutes";
+import { startEmailScheduler } from './src/services/emailSchedulerService';
 
 dotenv.config();
 
 const app = express();
 
-connectDB();
+// Connect to database
+connectDB().then(() => {
+    // Start email scheduler after database connection is established
+    console.log(' Database connected, starting email scheduler...');
+    startEmailScheduler();
+}).catch(err => {
+    console.error(' Database connection failed, email scheduler not started');
+});
 
 app.use(cors({
     origin: 'http://localhost:3000',
@@ -35,6 +44,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/notetaker', notetakerRoutes);
+app.use('/api/emails', emailRoutes);
 
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error(err.stack);
@@ -52,4 +62,5 @@ app.listen(PORT, () => {
     console.log(`  - Tasks: http://localhost:${PORT}/api/tasks`);
     console.log(`  - Comments: http://localhost:${PORT}/api/comments`);
     console.log(`  - Meetings: http://localhost:${PORT}/api/meetings`);
+    console.log(`  - Emails: http://localhost:${PORT}/api/emails`);
 });
