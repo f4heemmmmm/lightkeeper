@@ -111,6 +111,12 @@ async function scanEmailsForUser(userId: string, grantId: string): Promise<ScanR
                 if (extractedTask.hasTask && (extractedTask.confidence || 0) >= 0.5) {
                     result.tasksFound++;
 
+                    console.log(`[Scheduler]  Creating task from email...`);
+                    console.log(`[Scheduler]   Title: "${extractedTask.title}"`);
+                    console.log(`[Scheduler]   Priority: ${extractedTask.priority || 'medium'}`);
+                    console.log(`[Scheduler]   Due Date: ${extractedTask.dueDate || 'None'}`);
+                    console.log(`[Scheduler]   Confidence: ${extractedTask.confidence}`);
+
                     const newTask = new Task({
                         title: extractedTask.title,
                         description: extractedTask.description,
@@ -124,9 +130,15 @@ async function scanEmailsForUser(userId: string, grantId: string): Promise<ScanR
 
                     await newTask.save();
                     result.tasksCreated++;
-                    console.log(`[Scheduler] Task created: "${extractedTask.title}" (${extractedTask.priority})`);
+                    console.log(`[Scheduler] Task created successfully: "${extractedTask.title}" [${extractedTask.priority} priority]`);
                 } else {
-                    console.log(`[Scheduler] No actionable task found (confidence: ${extractedTask.confidence || 0})`);
+                    console.log(`[Scheduler] Email does NOT contain valid task`);
+                    console.log(`[Scheduler]   Reason: hasTask=${extractedTask.hasTask}, confidence=${extractedTask.confidence || 0}`);
+                    if (!extractedTask.hasTask) {
+                        console.log(`[Scheduler]   Decision: Email is informational/not actionable`);
+                    } else if ((extractedTask.confidence || 0) < 0.5) {
+                        console.log(`[Scheduler]   Decision: Confidence too low to create task`);
+                    }
                 }
             } catch (emailError: any) {
                 const errorMsg = `Error processing email ${email.id}: ${emailError.message}`;

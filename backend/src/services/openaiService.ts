@@ -151,6 +151,13 @@ export const extractTaskFromEmail = async (
         console.log('[OpenAI] From:', emailFrom);
         console.log('[OpenAI] Body length:', emailBody.length);
         
+        // Get current date for context when interpreting relative dates
+        const now = new Date();
+        const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        const currentDateTime = now.toISOString();
+        
+        console.log('[OpenAI] Current date for context:', currentDate);
+        
         const systemPrompt = `### Instruction ###
 You are an AI assistant specialized in analyzing emails to identify actionable tasks.
 Your task is to determine if an email contains a task or action item, and if so, extract structured task information.
@@ -175,19 +182,47 @@ Your task is to determine if an email contains a task or action item, and if so,
 
 3. Task extraction priorities:
 - "title": Create a clear, concise task title that captures the main action (e.g., "Review Q4 budget proposal", "Send contract to client")
-- "description": Extract or summarize the key details, context, and any specific requirements
-- "priority": Assess based on:
-  - "high": Urgent language (ASAP, urgent, critical), tight deadlines (today, tomorrow), executive requests
-  - "medium": Time-sensitive but not urgent, standard business requests
-  - "low": No deadline mentioned, informational with optional action, routine tasks
-- "dueDate": Extract any mentioned dates or deadlines and convert to ISO format (YYYY-MM-DD)
-  - Look for: "by Friday", "due tomorrow", "before the 15th", "next Monday"
-  - If no specific date, leave as null
-- "confidence": How confident you are this is a task (0.0-1.0)
-  - 0.9-1.0: Clear action request with explicit assignment
+- "description": Provide a comprehensive summary including:
+  * What needs to be done
+  * Key context from the email
+  * Any specific requirements or details
+  * Why this matters (if mentioned)
+  * Note: Keep it clear and actionable
+- "priority": CRITICAL - Carefully assess and justify priority based on:
+  - "high": Urgent language (ASAP, urgent, critical, STAT), tight deadlines (today, tomorrow, by end of day), executive/VIP requests, time-sensitive business impact, explicit urgency markers
+  - "medium": Standard business requests, reasonable timeframes (this week, next few days), normal work priority, some time sensitivity but not critical
+  - "low": No deadline mentioned, routine tasks, informational with optional action, flexible timing, no urgency indicators, "when you get a chance" type requests
+- "dueDate": CRITICAL - Only extract dates that are EXPLICITLY mentioned in the email
+  - DO NOT make up or assume dates if not mentioned
+  - DO NOT generate arbitrary future dates
+  - If NO date is mentioned, set to null
+  - If a date IS mentioned, convert to ISO format (YYYY-MM-DD)
+  - For relative dates (e.g., "Friday", "tomorrow", "next week"), use the current date provided to calculate the actual date
+  - For partial dates (e.g., "the 15th" without month), use current month/year to complete it
+  - Examples:
+    * "by Friday" → Calculate which Friday is next from current date
+    * "tomorrow" → Current date + 1 day
+    * "next Monday" → Calculate next Monday from current date
+    * "by the 15th" → Use current month and year, day 15
+    * "by December 25th" → Use current year, December 25
+    * "NO MENTION" → null (DO NOT GENERATE)
+- "confidence": How confident you are this is a VALID, ACTIONABLE task (0.0-1.0)
+  - 0.9-1.0: Clear action request with explicit assignment, definite task
   - 0.7-0.89: Strong indicators of task but some ambiguity
   - 0.5-0.69: Possible task but could be informational
   - Below 0.5: Likely not a task (set hasTask to false)
+  
+### CRITICAL DECISION LOGIC ###
+Before setting hasTask to true, ask yourself:
+1. Is there a clear action required?
+2. Is someone being asked/told to do something?
+3. Is this actionable (not just informational)?
+4. Can this be completed as a specific task?
+
+If ALL answers are YES → hasTask = true (with appropriate confidence)
+If ANY answer is NO → hasTask = false
+
+Only valid, actionable tasks should result in hasTask = true.
 
 4. Edge cases and exclusions:
 - Newsletter updates, marketing emails, automated notifications: NOT tasks
@@ -215,20 +250,38 @@ Your task is to determine if an email contains a task or action item, and if so,
 - If hasTask is false, you may omit title, description, priority, and dueDate
 - If hasTask is true, title and description are required
 - Use the email sender's name/context when helpful for clarity
-- Don't fabricate information; extract only what's explicitly stated or clearly implied
+- NEVER fabricate information; extract only what's explicitly stated or clearly implied
+- MOST IMPORTANT: Do NOT invent due dates. Only extract dates explicitly mentioned in the email
+- If no deadline is mentioned, dueDate MUST be null
 
 ### Output Primer ###
 Begin your response with:
 {
   "hasTask":`;
 
-        const userPrompt = `Analyze the following email and determine if it contains a task:
+        const userPrompt = `Analyze the following email and determine if it contains a task.
+
+IMPORTANT: Today's date is ${currentDate} (${currentDateTime}). Use this to interpret any relative dates mentioned in the email.
 
 From: ${emailFrom || 'Unknown'}
 Subject: ${emailSubject}
 
 Body:
-${emailBody}`;
+${emailBody}
+
+DECISION CHECKLIST:
+1. Does this email contain a VALID, ACTIONABLE task? (hasTask: true/false)
+2. If YES, how confident are you? (confidence: 0.0-1.0)
+3. What is the priority level based on urgency/importance? (priority: low/medium/high)
+4. Is there an explicit deadline mentioned? (dueDate: null or YYYY-MM-DD)
+
+Remember: 
+- Only set hasTask=true for VALID, ACTIONABLE tasks
+- Only extract dates that are EXPLICITLY mentioned in the email
+- If no deadline/date is mentioned, set dueDate to null
+- Use today's date (${currentDate}) to calculate relative dates like "Friday", "tomorrow", "next week", etc.
+- For partial dates like "the 15th", use the current month/year to complete the date
+- Provide a clear, comprehensive description that includes all relevant context`;
 
         console.log('[OpenAI] Sending request to GPT-4o-mini...');
         const response = await openai.chat.completions.create({
@@ -261,11 +314,22 @@ ${emailBody}`;
 
         // Validate and sanitize
         if (extracted.hasTask) {
-            console.log('[OpenAI] Task detected! Validating fields...');
+            console.log('[OpenAI]  VALID TASK DETECTED!');
+            console.log('[OpenAI] Decision Details:');
+            console.log(`  - Confidence: ${extracted.confidence || 0} (threshold: 0.5)`);
+            console.log(`  - Priority: ${extracted.priority || 'medium'}`);
+            console.log(`  - Has Deadline: ${extracted.dueDate ? 'Yes' : 'No'}`);
+            
             if (!extracted.title || !extracted.description) {
                 // If marked as hasTask but missing required fields, treat as no task
-                console.log('[OpenAI]  Task missing required fields, treating as no task');
+                console.log('[OpenAI]  Task missing required fields, treating as INVALID');
                 return { hasTask: false, confidence: 0 };
+            }
+
+            // Check confidence threshold
+            if ((extracted.confidence || 0) < 0.5) {
+                console.log(`[OpenAI]  Confidence too low (${extracted.confidence}), treating as INVALID`);
+                return { hasTask: false, confidence: extracted.confidence || 0 };
             }
 
             extracted.title = extracted.title.substring(0, 100);
@@ -273,13 +337,22 @@ ${emailBody}`;
             
             // Validate priority
             if (!['low', 'medium', 'high'].includes(extracted.priority || '')) {
-                console.log('[OpenAI] Invalid priority, defaulting to medium');
+                console.log('[OpenAI]  Invalid priority, defaulting to medium');
                 extracted.priority = 'medium';
             }
             
-            console.log('[OpenAI]  Task validation passed');
+            // Log date extraction result
+            if (extracted.dueDate) {
+                console.log(`[OpenAI] Due date extracted: ${extracted.dueDate}`);
+            } else {
+                console.log('[OpenAI] No due date mentioned in email');
+            }
+            
+            console.log('[OpenAI] Task validation PASSED - Will create task');
+            console.log(`[OpenAI] Task Summary: "${extracted.title}" [${extracted.priority} priority]`);
         } else {
-            console.log('[OpenAI] No task detected in email');
+            console.log('[OpenAI] NO VALID TASK detected in email');
+            console.log(`[OpenAI] Reason: Email is informational, not actionable, or confidence too low`);
         }
 
         return extracted;
