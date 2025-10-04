@@ -5,6 +5,7 @@ import connectDB from './config/database';
 import taskRoutes from './src/routes/taskRoutes';
 import authRoutes from './src/routes/authRoutes';
 import userRoutes from "./src/routes/userRoutes";
+import chatRoutes from "./src/routes/chatRoutes";
 import commentRoutes from "./src/routes/commentRoutes";
 import meetingRoutes from "./src/routes/meetingRoutes";
 import notetakerRoutes from "./src/routes/notetakerRoutes";
@@ -28,6 +29,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/comments', commentRoutes);
