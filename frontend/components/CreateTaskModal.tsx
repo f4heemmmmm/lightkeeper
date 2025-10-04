@@ -325,35 +325,39 @@ export default function CreateTaskModal({
                                 type="date"
                                 value={newTask.dueDate}
                                 onChange={(e) => {
-                                    setNewTask({
-                                        ...newTask,
-                                        dueDate: e.target.value,
-                                    });
-                                    if (touched.dueDate) {
-                                        setErrors((prev) => ({
-                                            ...prev,
-                                            dueDate: validateDueDate(
-                                                e.target.value
-                                            ),
-                                        }));
-                                    }
-                                    // Revalidate time when date changes
-                                    if (touched.dueTime && newTask.dueTime) {
-                                        setErrors((prev) => ({
-                                            ...prev,
-                                            dueTime: validateDueTime(
-                                                newTask.dueTime
-                                            ),
-                                        }));
+                                    // Ensure the date is in correct format
+                                    const dateValue = e.target.value;
+                                    if (dateValue && dateValue.length === 10) {
+                                        setNewTask({
+                                            ...newTask,
+                                            dueDate: dateValue,
+                                        });
+                                        if (touched.dueDate) {
+                                            setErrors((prev) => ({
+                                                ...prev,
+                                                dueDate: validateDueDate(dateValue),
+                                            }));
+                                        }
+                                        // Revalidate time when date changes
+                                        if (touched.dueTime && newTask.dueTime) {
+                                            setErrors((prev) => ({
+                                                ...prev,
+                                                dueTime: validateDueTime(newTask.dueTime),
+                                            }));
+                                        }
                                     }
                                 }}
                                 onBlur={() => handleBlur("dueDate")}
                                 min={getTodayDate()}
+                                max="2030-12-31"
                                 className={`w-full bg-white/5 border rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 transition-all text-sm ${
                                     touched.dueDate && errors.dueDate
                                         ? "border-red-500/50 focus:ring-red-500/50 bg-red-500/5"
                                         : "border-white/10 focus:ring-white/20 focus:border-white/20"
                                 }`}
+                                style={{
+                                    colorScheme: 'dark'
+                                }}
                             />
                             {touched.dueDate && errors.dueDate && (
                                 <p className="text-red-400 text-xs mt-2">

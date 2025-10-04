@@ -10,6 +10,8 @@ import {
     Plus,
     LogOut,
     RotateCcw,
+    Filter,
+    X,
 } from "lucide-react";
 
 interface User {
@@ -85,6 +87,9 @@ export default function OrganisationHomepage({
 }: OrganisationHomepageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
+    const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+    const [dragOverZone, setDragOverZone] = useState<string | null>(null);
+    const [priorityFilter, setPriorityFilter] = useState<string>("all");
     const [newTask, setNewTask] = useState<NewTask>({
         title: "",
         description: "",
@@ -93,8 +98,17 @@ export default function OrganisationHomepage({
         dueTime: "",
     });
 
-    const allTasks = tasks.filter((t) => t.status !== "completed");
-    const completedTasks = tasks.filter((t) => t.status === "completed");
+    const allTasks = tasks.filter((t) => {
+        const statusMatch = t.status !== "completed";
+        const priorityMatch = priorityFilter === "all" || t.priority === priorityFilter;
+        return statusMatch && priorityMatch;
+    });
+    
+    const completedTasks = tasks.filter((t) => {
+        const statusMatch = t.status === "completed";
+        const priorityMatch = priorityFilter === "all" || t.priority === priorityFilter;
+        return statusMatch && priorityMatch;
+    });
 
     const createTask = async (): Promise<void> => {
         if (
@@ -309,6 +323,45 @@ export default function OrganisationHomepage({
         });
     };
 
+    // Drag and drop handlers
+    const handleDragStart = (e: React.DragEvent, task: Task): void => {
+        setDraggedTask(task);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", task._id);
+    };
+
+    const handleDragEnd = (): void => {
+        setDraggedTask(null);
+        setDragOverZone(null);
+    };
+
+    const handleDragOver = (e: React.DragEvent, zone: string): void => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDragOverZone(zone);
+    };
+
+    const handleDragLeave = (): void => {
+        setDragOverZone(null);
+    };
+
+    const handleDrop = async (e: React.DragEvent, targetZone: string): Promise<void> => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData("text/plain");
+        
+        if (!draggedTask || !taskId) return;
+
+        const newStatus = targetZone === "completed" ? "completed" : "pending";
+        
+        // Only update if status actually changes
+        if (draggedTask.status !== newStatus) {
+            await updateTaskStatus(taskId, newStatus);
+        }
+
+        setDraggedTask(null);
+        setDragOverZone(null);
+    };
+
     return (
         <div className="min-h-screen bg-black text-white">
             {/* Header */}
@@ -382,6 +435,96 @@ export default function OrganisationHomepage({
                 </div>
             )}
 
+            {/* Priority Filters */}
+            <div className="max-w-7xl mx-auto px-8 py-6">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
+                                <Filter className="w-4 h-4 text-blue-400" />
+                                <span className="text-gray-300 text-sm font-medium">Filter by Priority</span>
+                            </div>
+                            {priorityFilter !== "all" && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500">•</span>
+                                    <span className="text-xs text-blue-400 capitalize">
+                                        Showing {priorityFilter} priority tasks
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                            {[
+                                { 
+                                    value: "all", 
+                                    label: "All", 
+                                    color: "bg-gray-500/20 text-gray-400 border-gray-500/30 hover:bg-gray-500/30",
+                                    activeColor: "bg-gray-500/30 text-gray-300 border-gray-500/50"
+                                },
+                                { 
+                                    value: "high", 
+                                    label: "High", 
+                                    color: "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30",
+                                    activeColor: "bg-red-500/30 text-red-300 border-red-500/50"
+                                },
+                                { 
+                                    value: "medium", 
+                                    label: "Medium", 
+                                    color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30",
+                                    activeColor: "bg-yellow-500/30 text-yellow-300 border-yellow-500/50"
+                                },
+                                { 
+                                    value: "low", 
+                                    label: "Low", 
+                                    color: "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30",
+                                    activeColor: "bg-green-500/30 text-green-300 border-green-500/50"
+                                }
+                            ].map((filter) => (
+                                <button
+                                    key={filter.value}
+                                    onClick={() => setPriorityFilter(filter.value)}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-200 ${
+                                        priorityFilter === filter.value
+                                            ? filter.activeColor
+                                            : filter.color
+                                    }`}
+                                >
+                                    {filter.label}
+                                </button>
+                            ))}
+                            
+                            {priorityFilter !== "all" && (
+                                <button
+                                    onClick={() => setPriorityFilter("all")}
+                                    className="ml-2 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all duration-200"
+                                    title="Clear filter"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* Filter Stats */}
+                    <div className="mt-3 pt-3 border-t border-white/10">
+                        <div className="flex items-center gap-6 text-xs text-gray-500">
+                            <span>
+                                <span className="text-gray-300 font-medium">{allTasks.length}</span> active tasks
+                            </span>
+                            <span>
+                                <span className="text-gray-300 font-medium">{completedTasks.length}</span> completed
+                            </span>
+                            {priorityFilter !== "all" && (
+                                <span className="text-blue-400">
+                                    Filtered by {priorityFilter} priority
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Stats */}
             <div className="max-w-7xl mx-auto px-8 py-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -412,7 +555,14 @@ export default function OrganisationHomepage({
             <div className="max-w-7xl mx-auto px-8 pb-8">
                 <div className="flex gap-6 h-[calc(100vh-500px)] min-h-[400px]">
                     {/* Left Column - All Tasks */}
-                    <div className="w-1/2 bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col">
+                    <div 
+                        className={`w-1/2 bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col transition-colors ${
+                            dragOverZone === "pending" ? "border-blue-400 bg-blue-500/10" : ""
+                        }`}
+                        onDragOver={(e) => handleDragOver(e, "pending")}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, "pending")}
+                    >
                         <div className="px-6 py-4 border-b border-white/10">
                             <h2 className="text-xl font-medium">
                                 All Tasks ({allTasks.length})
@@ -434,23 +584,33 @@ export default function OrganisationHomepage({
                                     {allTasks.map((task) => (
                                         <div
                                             key={task._id}
-                                            className="p-4 cursor-pointer hover:bg-white/5 transition-colors"
+                                            className={`p-4 cursor-pointer hover:bg-white/5 transition-colors ${
+                                                draggedTask?._id === task._id ? "opacity-50" : ""
+                                            }`}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, task)}
+                                            onDragEnd={handleDragEnd}
                                             onClick={() =>
                                                 handleTaskClick(task)
                                             }
                                         >
                                             <div className="flex items-start gap-4">
-                                                <button
-                                                    onClick={(e) =>
-                                                        toggleTaskCompletion(
-                                                            task,
-                                                            e
-                                                        )
-                                                    }
-                                                    className="flex-shrink-0 hover:scale-110 transition-transform mt-1"
+                                             <button
+                                                onClick={(e) => toggleTaskCompletion(task, e)}
+                                                className="relative flex-shrink-0 hover:scale-110 transition-transform mt-1"
                                                 >
-                                                    <Circle className="w-5 h-5 text-gray-400 hover:text-gray-300" />
-                                                </button>
+                                                {task.status === "completed" ? (
+                                                
+                                                    <CheckCircle2 className="w-5 h-5 text-green-400" />
+                                                ) : (
+                                                
+                                                    <span className="relative flex items-center justify-center">
+                                                    <Circle className="w-5 h-5 text-gray-400" />
+                                                    <span className="absolute w-3.5 h-3.5 rounded-full bg-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                                                    </span>
+                                                )}
+                                            </button>
+
                                                 <div className="flex-1 min-w-0">
                                                     <h3 className="text-base font-medium mb-2">
                                                         {task.title}
@@ -495,7 +655,14 @@ export default function OrganisationHomepage({
                     </div>
 
                     {/* Right Column - Completed Tasks */}
-                    <div className="w-1/2 bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col">
+                    <div 
+                        className={`w-1/2 bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col transition-colors ${
+                            dragOverZone === "completed" ? "border-green-400 bg-green-500/10" : ""
+                        }`}
+                        onDragOver={(e) => handleDragOver(e, "completed")}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, "completed")}
+                    >
                         <div className="px-6 py-4 border-b border-white/10">
                             <h2 className="text-xl font-medium">
                                 Completed Tasks ({completedTasks.length})
@@ -511,7 +678,12 @@ export default function OrganisationHomepage({
                                     {completedTasks.map((task) => (
                                         <div
                                             key={task._id}
-                                            className="p-4 cursor-pointer hover:bg-white/5 transition-colors"
+                                            className={`p-4 cursor-pointer hover:bg-white/5 transition-colors ${
+                                                draggedTask?._id === task._id ? "opacity-50" : ""
+                                            }`}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, task)}
+                                            onDragEnd={handleDragEnd}
                                             onClick={() =>
                                                 handleTaskClick(task)
                                             }
