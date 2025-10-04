@@ -21,5 +21,3 @@ router.delete('/:id', protect, cancelNotetaker);
 router.get('/:id/status', protect, checkNotetakerStatus);
 
 export default router;
-
-

@@ -1,7 +1,7 @@
 import axios, { AxiosError } from "axios";
 import { useState, useEffect } from "react";
 import TaskDetailModal from "../TaskDetailModal";
-import { ChevronRight, LogOut, X, Plus } from "lucide-react";
+import { ChevronRight, X, Plus } from "lucide-react";
 import AvailableTaskDetailModal from "../AvailableTaskDetailModal";
 
 interface User {
@@ -52,7 +52,6 @@ interface MemberHomepageProps {
     selectedTask: Task | null;
     setSelectedTask: (task: Task | null) => void;
     getAuthHeader: () => Record<string, string>;
-    handleLogout: () => void;
     API_URL: string;
 }
 
@@ -66,7 +65,6 @@ export default function MemberHomepage({
     selectedTask,
     setSelectedTask,
     getAuthHeader,
-    handleLogout,
     API_URL,
 }: MemberHomepageProps) {
     const [unassignedTasks, setUnassignedTasks] = useState<Task[]>([]);
@@ -111,10 +109,7 @@ export default function MemberHomepage({
     }, []);
 
     const createTask = async (): Promise<void> => {
-        if (
-            !newTask.title.trim() ||
-            !newTask.description.trim()
-        ) {
+        if (!newTask.title.trim() || !newTask.description.trim()) {
             setError("Title and description are required");
             return;
         }
@@ -297,63 +292,7 @@ export default function MemberHomepage({
     };
 
     return (
-        <div className="min-h-screen bg-black text-white">
-            {/* Header */}
-            <div className="border-b border-white/10 p-8">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div>
-                        <h1 className="text-8xl font-light tracking-tight mb-2">
-                            Lightkeeper
-                        </h1>
-                        <p className="text-gray-400 font-medium">
-                            Member Dashboard - Your assigned tasks
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="text-right">
-                            <p className="text-sm text-gray-400">
-                                {user.email}
-                            </p>
-                            <p className="text-xs text-gray-500 capitalize">
-                                {user.role}
-                            </p>
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            className="p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                            title="Logout"
-                        >
-                            <LogOut className="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Navigation */}
-            <div className="border-b border-white/10">
-                <div className="max-w-7xl mx-auto px-8">
-                    <div className="flex gap-6">
-                        <button className="py-4 text-white border-b-2 border-white">
-                            Tasks
-                        </button>
-                        <button
-                            onClick={() => (window.location.href = "/meetings")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Meetings
-                        </button>
-                        <button
-                            onClick={() =>
-                                (window.location.href = "/notetaker")
-                            }
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            AI Notetaker
-                        </button>
-                    </div>
-                </div>
-            </div>
-
+        <>
             {/* Error Message */}
             {error && (
                 <div className="max-w-7xl mx-auto px-8 pt-4">
@@ -740,6 +679,6 @@ export default function MemberHomepage({
                     </div>
                 </div>
             )}
-        </div>
+        </>
     );
 }

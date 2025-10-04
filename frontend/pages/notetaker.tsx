@@ -1,16 +1,8 @@
-import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
 import { useState, useEffect } from "react";
-import {
-    Video,
-    LogOut,
-    Plus,
-    X,
-    Clock,
-    CheckCircle,
-    XCircle,
-    Loader,
-} from "lucide-react";
+import { useRouter } from "next/router";
+import AppLayout from "@/components/AppLayout";
+import { Plus, X, Clock, CheckCircle, XCircle, Loader } from "lucide-react";
 
 interface User {
     id: string;
@@ -85,7 +77,6 @@ export default function NotetakerPage() {
             router.push("/login");
         }
 
-        // Poll for updates every 30 seconds
         const interval = setInterval(fetchSessions, 30000);
         return () => clearInterval(interval);
     }, [router]);
@@ -95,9 +86,7 @@ export default function NotetakerPage() {
             setIsLoading(true);
             const response = await axios.get<NotetakerSession[]>(
                 `${API_URL}/api/notetaker`,
-                {
-                    headers: getAuthHeader(),
-                }
+                { headers: getAuthHeader() }
             );
             setSessions(response.data);
             setError(null);
@@ -122,13 +111,9 @@ export default function NotetakerPage() {
 
         setIsScheduling(true);
         try {
-            const response = await axios.post(
-                `${API_URL}/api/notetaker`,
-                scheduleData,
-                {
-                    headers: getAuthHeader(),
-                }
-            );
+            await axios.post(`${API_URL}/api/notetaker`, scheduleData, {
+                headers: getAuthHeader(),
+            });
 
             await fetchSessions();
             setScheduleData({ meetingUrl: "", meetingTitle: "" });
@@ -160,12 +145,6 @@ export default function NotetakerPage() {
             );
             console.error("Error cancelling session:", err);
         }
-    };
-
-    const handleLogout = (): void => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        router.push("/login");
     };
 
     const getStatusIcon = (status: NotetakerSession["status"]) => {
@@ -221,63 +200,7 @@ export default function NotetakerPage() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white">
-            {/* Header */}
-            <div className="border-b border-white/10 p-8">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div>
-                        <h1 className="text-8xl font-light tracking-tight mb-2">
-                            Lightkeeper
-                        </h1>
-                        <p className="text-gray-400 font-medium">
-                            AI Notetaker - Automatically join and transcribe
-                            meetings
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="text-right">
-                            <p className="text-sm text-gray-400">
-                                {user.email}
-                            </p>
-                            <p className="text-xs text-gray-500 capitalize">
-                                {user.role}
-                            </p>
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            className="p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                            title="Logout"
-                        >
-                            <LogOut className="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Navigation */}
-            <div className="border-b border-white/10">
-                <div className="max-w-7xl mx-auto px-8">
-                    <div className="flex gap-6">
-                        <button
-                            onClick={() => router.push("/")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Tasks
-                        </button>
-                        <button
-                            onClick={() => router.push("/meetings")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Meetings
-                        </button>
-                        <button className="py-4 text-white border-b-2 border-white">
-                            AI Notetaker
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Error Message */}
+        <AppLayout user={user} currentPage="notetaker">
             {error && (
                 <div className="max-w-7xl mx-auto px-8 pt-4">
                     <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg flex justify-between items-center">
@@ -292,7 +215,6 @@ export default function NotetakerPage() {
                 </div>
             )}
 
-            {/* Info Banner */}
             <div className="max-w-7xl mx-auto px-8 py-6">
                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
                     <p className="text-sm text-blue-400">
@@ -304,7 +226,6 @@ export default function NotetakerPage() {
                 </div>
             </div>
 
-            {/* Stats */}
             <div className="max-w-7xl mx-auto px-8 pb-8">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="bg-white/5 border border-white/10 rounded-lg p-6">
@@ -352,7 +273,6 @@ export default function NotetakerPage() {
                 </div>
             </div>
 
-            {/* Sessions List */}
             <div className="max-w-7xl mx-auto px-8 pb-8">
                 <div className="bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                     <div className="px-6 py-4 border-b border-white/10">
@@ -448,7 +368,6 @@ export default function NotetakerPage() {
                 </div>
             </div>
 
-            {/* Floating Action Button */}
             <div className="fixed bottom-8 right-8">
                 <button
                     onClick={() => setShowScheduleModal(true)}
@@ -462,7 +381,6 @@ export default function NotetakerPage() {
                 </button>
             </div>
 
-            {/* Schedule Modal */}
             {showScheduleModal && (
                 <div
                     className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50"
@@ -568,6 +486,6 @@ export default function NotetakerPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </AppLayout>
     );
 }

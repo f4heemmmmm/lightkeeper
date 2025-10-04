@@ -1,18 +1,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
+import AppLayout from "@/components/AppLayout";
 import MeetingDetailModal from "@/components/MeetingDetailModal";
-
-import {
-    Upload,
-    FileText,
-    Trash2,
-    ChevronRight,
-    LogOut,
-    X,
-    CheckSquare,
-    RotateCcw,
-} from "lucide-react";
+import { Upload, FileText, ChevronRight, X, RotateCcw } from "lucide-react";
 
 interface User {
     id: string;
@@ -40,19 +31,13 @@ interface ErrorResponse {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-/**
- * Decode base64 content with proper UTF-8 handling
- * This fixes encoding issues like "â€™" appearing instead of "'"
- */
 const decodeBase64Content = (base64String: string): string => {
     try {
         const binaryString = atob(base64String);
-
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
         }
-
         const decoder = new TextDecoder("utf-8");
         return decoder.decode(bytes);
     } catch (error) {
@@ -111,9 +96,7 @@ export default function MeetingsPage() {
             setIsLoading(true);
             const response = await axios.get<Meeting[]>(
                 `${API_URL}/api/meetings`,
-                {
-                    headers: getAuthHeader(),
-                }
+                { headers: getAuthHeader() }
             );
             setMeetings(response.data);
             setError(null);
@@ -133,12 +116,10 @@ export default function MeetingsPage() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-
             if (!file.name.endsWith(".txt")) {
                 setError("Only .txt files are allowed");
                 return;
             }
-
             setSelectedFile(file);
             setError(null);
         }
@@ -179,9 +160,7 @@ export default function MeetingsPage() {
                     fileSize: selectedFile.size,
                     fileContent: content,
                 },
-                {
-                    headers: getAuthHeader(),
-                }
+                { headers: getAuthHeader() }
             );
 
             setMeetings([response.data, ...meetings]);
@@ -209,7 +188,6 @@ export default function MeetingsPage() {
 
             if (meeting.fileUrl.startsWith("data:text/plain;base64,")) {
                 const base64Content = meeting.fileUrl.split(",")[1];
-
                 if (!base64Content) {
                     setFileContent("Invalid transcript format");
                     return;
@@ -263,10 +241,37 @@ export default function MeetingsPage() {
         }
     };
 
-    const handleLogout = (): void => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        router.push("/login");
+    const handleMigrateTasks = async (): Promise<void> => {
+        if (
+            !confirm(
+                "This will create tasks from action items in all your existing meetings. Continue?"
+            )
+        ) {
+            return;
+        }
+
+        setIsMigrating(true);
+        try {
+            const response = await axios.post(
+                `${API_URL}/api/meetings/migrate-tasks`,
+                {},
+                { headers: getAuthHeader() }
+            );
+
+            const result = response.data;
+            alert(
+                `Migration completed!\n\nCreated ${result.totalTasksCreated} tasks from ${result.meetingsProcessed} meetings.`
+            );
+            fetchMeetings();
+        } catch (err) {
+            const axiosError = err as AxiosError<ErrorResponse>;
+            setError(
+                axiosError.response?.data?.message || "Failed to migrate tasks"
+            );
+            console.error("Error migrating tasks:", err);
+        } finally {
+            setIsMigrating(false);
+        }
     };
 
     const formatFileSize = (bytes: number): string => {
@@ -287,102 +292,12 @@ export default function MeetingsPage() {
         });
     };
 
-    const handleMigrateTasks = async (): Promise<void> => {
-        if (
-            !confirm(
-                "This will create tasks from action items in all your existing meetings. Continue?"
-            )
-        ) {
-            return;
-        }
-
-        setIsMigrating(true);
-        try {
-            const response = await axios.post(
-                `${API_URL}/api/meetings/migrate-tasks`,
-                {},
-                {
-                    headers: getAuthHeader(),
-                }
-            );
-
-            const result = response.data;
-            alert(
-                `Migration completed!\n\nCreated ${result.totalTasksCreated} tasks from ${result.meetingsProcessed} meetings.`
-            );
-
-            // Refresh the meetings list
-            fetchMeetings();
-        } catch (err) {
-            const axiosError = err as AxiosError<ErrorResponse>;
-            setError(
-                axiosError.response?.data?.message || "Failed to migrate tasks"
-            );
-            console.error("Error migrating tasks:", err);
-        } finally {
-            setIsMigrating(false);
-        }
-    };
-
     if (!user) {
         return null;
     }
 
     return (
-        <div className="min-h-screen bg-black text-white">
-            {/* Header */}
-            <div className="border-b border-white/10 p-8">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div>
-                        <h1 className="text-8xl font-light tracking-tight mb-2">
-                            Lightkeeper
-                        </h1>
-                        <p className="text-gray-400 font-medium">
-                            Meetings - Upload and manage meeting notes
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="text-right">
-                            <p className="text-sm text-gray-400">
-                                {user.email}
-                            </p>
-                            <p className="text-xs text-gray-500 capitalize">
-                                {user.role}
-                            </p>
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            className="p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                            title="Logout"
-                        >
-                            <LogOut className="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div className="border-b border-white/10">
-                <div className="max-w-7xl mx-auto px-8">
-                    <div className="flex gap-6">
-                        <button
-                            onClick={() => router.push("/")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            Tasks
-                        </button>
-                        <button className="py-4 text-white border-b-2 border-white">
-                            Meetings
-                        </button>
-                        <button
-                            onClick={() => router.push("/notetaker")}
-                            className="py-4 text-gray-400 hover:text-white transition-colors"
-                        >
-                            AI Notetaker
-                        </button>
-                    </div>
-                </div>
-            </div>
-
+        <AppLayout user={user} currentPage="meetings">
             {error && (
                 <div className="max-w-7xl mx-auto px-8 pt-4">
                     <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg flex justify-between items-center">
@@ -397,7 +312,6 @@ export default function MeetingsPage() {
                 </div>
             )}
 
-            {/* Stats and Migration */}
             <div className="max-w-7xl mx-auto px-8 py-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-white/5 border border-white/10 rounded-lg p-6">
@@ -497,7 +411,6 @@ export default function MeetingsPage() {
                 </div>
             </div>
 
-            {/* Floating Action Button */}
             <div className="fixed bottom-8 right-8">
                 <button
                     onClick={() => setShowUploadModal(true)}
@@ -511,7 +424,6 @@ export default function MeetingsPage() {
                 </button>
             </div>
 
-            {/* Upload Modal */}
             {showUploadModal && (
                 <div
                     className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50"
@@ -620,6 +532,6 @@ export default function MeetingsPage() {
                     onDelete={deleteMeeting}
                 />
             )}
-        </div>
+        </AppLayout>
     );
 }

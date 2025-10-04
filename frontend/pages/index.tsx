@@ -1,6 +1,7 @@
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
 import { useState, useEffect } from "react";
+import AppLayout from "@/components/AppLayout";
 import MemberHomepage from "@/components/homepage/MemberHomepage";
 import OrganisationHomepage from "@/components/homepage/OrganisationHomepage";
 
@@ -112,44 +113,40 @@ export default function TaskDashboard() {
         }
     };
 
-    const handleLogout = (): void => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        router.push("/login");
-    };
-
     if (!user) {
         return null;
     }
 
-    return user.role === "organisation" ? (
-        <OrganisationHomepage
-            user={user}
-            tasks={tasks}
-            setTasks={setTasks}
-            members={members}
-            isLoading={isLoading}
-            error={error}
-            setError={setError}
-            selectedTask={selectedTask}
-            setSelectedTask={setSelectedTask}
-            getAuthHeader={getAuthHeader}
-            handleLogout={handleLogout}
-            API_URL={API_URL}
-        />
-    ) : (
-        <MemberHomepage
-            user={user}
-            tasks={tasks}
-            setTasks={setTasks}
-            isLoading={isLoading}
-            error={error}
-            setError={setError}
-            selectedTask={selectedTask}
-            setSelectedTask={setSelectedTask}
-            getAuthHeader={getAuthHeader}
-            handleLogout={handleLogout}
-            API_URL={API_URL}
-        />
+    return (
+        <AppLayout user={user} currentPage="tasks">
+            {user.role === "organisation" ? (
+                <OrganisationHomepage
+                    user={user}
+                    tasks={tasks}
+                    setTasks={setTasks}
+                    members={members}
+                    isLoading={isLoading}
+                    error={error}
+                    setError={setError}
+                    selectedTask={selectedTask}
+                    setSelectedTask={setSelectedTask}
+                    getAuthHeader={getAuthHeader}
+                    API_URL={API_URL}
+                />
+            ) : (
+                <MemberHomepage
+                    user={user}
+                    tasks={tasks}
+                    setTasks={setTasks}
+                    isLoading={isLoading}
+                    error={error}
+                    setError={setError}
+                    selectedTask={selectedTask}
+                    setSelectedTask={setSelectedTask}
+                    getAuthHeader={getAuthHeader}
+                    API_URL={API_URL}
+                />
+            )}
+        </AppLayout>
     );
 }
