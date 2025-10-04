@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { IMeeting } from '../models/Meeting';
+import { sanitizeMeetingTranscript, sanitizeContent, validateContentSafety } from './guardrailsService';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -17,58 +18,66 @@ export const askMeetingQuestion = async (
   conversationHistory: ConversationMessage[] = []
 ): Promise<string> => {
   try {
-    const systemPrompt = `You are an intelligent AI assistant helping users understand and extract information from meeting transcripts. Your role is to answer questions about the meeting based ONLY on the provided transcript and meeting metadata.
+    console.log('[ChatService] Processing question with guardrails...');
+    
+    // Sanitize user question
+    const questionResult = sanitizeContent(question, 'chat_question');
+    if (!validateContentSafety(questionResult).isSafe) {
+      return "I cannot process your question as it contains sensitive information. Please rephrase your question without including personal data, credentials, or other sensitive details.";
+    }
 
-### Meeting Information ###
+    // Sanitize transcript
+    const transcriptResult = sanitizeMeetingTranscript(transcript);
+    const transcriptSafety = validateContentSafety(transcriptResult);
+    if (!transcriptSafety.isSafe) {
+      return "I cannot analyze this meeting transcript due to data privacy concerns. The transcript contains too much sensitive information that has been redacted.";
+    }
+
+    // Sanitize conversation history
+    const sanitizedHistory: ConversationMessage[] = [];
+    for (const msg of conversationHistory) {
+      const msgResult = sanitizeContent(msg.content, 'chat_history');
+      if (validateContentSafety(msgResult).isSafe) {
+        sanitizedHistory.push({
+          role: msg.role,
+          content: msgResult.sanitizedContent
+        });
+      }
+      // Skip messages that fail safety validation
+    }
+
+    if (questionResult.hasViolations || transcriptResult.hasViolations) {
+      console.warn('[ChatService] Content sanitized before processing');
+    }
+
+    const systemPrompt = `You are an intelligent AI assistant helping users understand and extract information from meeting transcripts.
+
+**IMPORTANT PRIVACY NOTICE**: 
+- The transcript and conversation history have been sanitized for privacy protection
+- Any [REDACTED] markers indicate where sensitive information was removed
+- Do not attempt to guess or reconstruct redacted information
+- Focus on providing insights based on the available sanitized content
+
+Your role is to answer questions about the meeting based ONLY on the provided transcript and meeting metadata.
+
+**Meeting Information:**
 - Title: ${meeting.title}
-- Description: ${meeting.description || 'Not provided'}
-- Summary: ${meeting.summary || 'Not provided'}
-- Action Items: ${meeting.actionItems && meeting.actionItems.length > 0 ? meeting.actionItems.join('; ') : 'None identified'}
+- Description: ${meeting.description}
+- Summary: ${meeting.summary}
+- Action Items: ${meeting.actionItems?.join(', ') || 'None'}
 
-### Guidelines ###
-1. **Answer based on the transcript**: Always reference the actual content from the meeting transcript when answering questions.
-
-2. **Be specific and accurate**: Provide precise information. Quote relevant parts of the transcript when appropriate.
-
-3. **Acknowledge limitations**: If the information requested is not in the transcript, clearly state that you don't have that information in the meeting notes rather than making up an answer.
-
-4. **Handle out-of-scope questions**: If asked questions unrelated to the meeting (e.g., general knowledge, personal advice, unrelated topics), politely redirect the user:
-   - "I'm specifically designed to help you with questions about this meeting. Based on the transcript I have, I can help you with [suggest relevant topics]. Is there something specific about the meeting you'd like to know?"
-
-5. **Be conversational and helpful**: Maintain a friendly, professional tone. You can ask clarifying questions if needed.
-
-6. **Provide context**: When answering, give enough context so the user understands not just the answer, but where in the meeting it was discussed.
-
-7. **Handle ambiguous questions**: If a question is unclear, ask for clarification or provide the most relevant information you can find.
-
-### Response Format ###
-- For factual questions: Provide direct answers with references to the transcript
-- For questions about what was discussed: Summarize the relevant discussion
-- For questions about decisions: Clearly state what was decided and who made the decision if available
-- For questions about action items: List specific tasks, owners (if mentioned), and deadlines (if mentioned)
-- For unavailable information: "I don't see any information about [topic] in this meeting transcript. The meeting primarily covered [main topics]. Would you like to know more about any of these areas?"
-
-### Important Notes ###
-- Never fabricate information not present in the transcript
-- If asked about attendees but they're not mentioned, say so
-- If asked about topics not covered, acknowledge this clearly
-- Stay focused on this specific meeting
-
-### Meeting Transcript ###
-${transcript}
+**Transcript Content:**
+${transcriptResult.sanitizedContent}
 
 Now, answer the user's questions based on this meeting information.`;
 
-    // Build messages array with conversation history
+    // Build messages array with sanitized conversation history
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      {
-        role: 'system',
-        content: systemPrompt
-      }
+      { role: 'system', content: systemPrompt }
     ];
 
-    // Add conversation history (limit to last 10 messages to manage context length)
-    const recentHistory = conversationHistory.slice(-10);
+    // Add sanitized conversation history (limit to last 10 messages)
+    const recentHistory = sanitizedHistory.slice(-10);
     recentHistory.forEach((msg) => {
       messages.push({
         role: msg.role,
@@ -76,10 +85,10 @@ Now, answer the user's questions based on this meeting information.`;
       });
     });
 
-    // Add current question
+    // Add sanitized current question
     messages.push({
       role: 'user',
-      content: question
+      content: questionResult.sanitizedContent
     });
 
     const response = await openai.chat.completions.create({
@@ -95,7 +104,9 @@ Now, answer the user's questions based on this meeting information.`;
       throw new Error('No response from AI');
     }
 
+    console.log('[ChatService] Response generated with privacy protection');
     return answer;
+
   } catch (error: any) {
     console.error('Error in askMeetingQuestion:', error);
     
@@ -108,7 +119,6 @@ Now, answer the user's questions based on this meeting information.`;
       return "There's a configuration issue with the AI service. Please contact support.";
     }
 
-    // Generic error response
     return "I apologize, but I encountered an error processing your question. Please try rephrasing your question or ask something else about the meeting.";
   }
 };
