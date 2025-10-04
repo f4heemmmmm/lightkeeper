@@ -9,6 +9,7 @@ export interface ITask extends Document {
     assignedTo?: mongoose.Types.ObjectId | null;
     isPrivate: boolean;
     createdBy: mongoose.Types.ObjectId;
+    source?: 'manual' | 'email' | 'calendar';
     createdAt: Date;
     updatedAt: Date;
 }
@@ -55,6 +56,11 @@ const taskSchema = new Schema<ITask>(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: true
+        },
+        source: {
+            type: String,
+            enum: ['manual', 'email', 'calendar'],
+            default: 'manual'
         }
     },
     {

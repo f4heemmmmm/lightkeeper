@@ -1,8 +1,7 @@
 import axios, { AxiosError } from "axios";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import AppLayout from "@/components/AppLayout";
-import { Plus, X, Clock, CheckCircle, XCircle, Loader } from "lucide-react";
+import { Plus, X, Clock, CheckCircle, XCircle, Loader, LogOut } from "lucide-react";
 
 interface User {
     id: string;
@@ -195,12 +194,92 @@ export default function NotetakerPage() {
         });
     };
 
+    const handleLogout = (): void => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+    };
+
     if (!user) {
         return null;
     }
 
     return (
-        <AppLayout user={user} currentPage="notetaker">
+        <div className="min-h-screen bg-black text-white">
+            {/* Header */}
+            <div className="border-b border-white/10 p-8">
+                <div className="max-w-7xl mx-auto flex justify-between items-center">
+                    <div>
+                        <h1 className="text-8xl font-light tracking-tight mb-2">
+                            Lightkeeper
+                        </h1>
+                        <p className="text-gray-400 font-medium">
+                            AI Notetaker - Automatically join and transcribe
+                            meetings
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="text-right">
+                            <p className="text-sm text-gray-400">
+                                {user.email}
+                            </p>
+                            <p className="text-xs text-gray-500 capitalize">
+                                {user.role}
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleLogout}
+                            className="p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                            title="Logout"
+                        >
+                            <LogOut className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Navigation */}
+            <div className="border-b border-white/10">
+                <div className="max-w-7xl mx-auto px-8">
+                    <div className="flex gap-6">
+                        <button
+                            onClick={() => router.push("/")}
+                            className="py-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            Tasks
+                        </button>
+                        <button
+                            onClick={() => router.push("/meetings")}
+                            className="py-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            Meetings
+                        </button>
+                        <button className="py-4 text-white border-b-2 border-white">
+                            AI Notetaker
+                        </button>
+                        <button
+                            onClick={() => router.push("/calendar")}
+                            className="py-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            Calendar
+                        </button>
+                        <button
+                            onClick={() => router.push("/upcoming")}
+                            className="py-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            Upcoming Events
+                        </button>
+                        <button
+                            onClick={() => router.push("/event-designer")}
+                            className="py-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            Event Designer
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Error Message */}
             {error && (
                 <div className="max-w-7xl mx-auto px-8 pt-4">
                     <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg flex justify-between items-center">
@@ -486,6 +565,6 @@ export default function NotetakerPage() {
                     </div>
                 </div>
             )}
-        </AppLayout>
+        </div>
     );
 }

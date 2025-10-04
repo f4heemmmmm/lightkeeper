@@ -237,3 +237,141 @@ export const fetchEmailById = async (
         throw new Error(`Failed to fetch email: ${error.response?.data?.message || error.message}`);
     }
 };
+
+/**
+ * Calendar Event Interface
+ */
+export interface NylasCalendarEvent {
+    id: string;
+    grant_id: string;
+    calendar_id: string;
+    title: string;
+    description?: string;
+    when: {
+        start_time?: number; // Unix timestamp for specific time events
+        end_time?: number;
+        start_date?: string; // YYYY-MM-DD for all-day events
+        end_date?: string;
+        object: 'timespan' | 'date' | 'datespan';
+    };
+    location?: string;
+    participants?: Array<{
+        email: string;
+        name?: string;
+        status?: string;
+    }>;
+    status?: string;
+    busy?: boolean;
+    read_only?: boolean;
+    created_at?: number;
+    updated_at?: number;
+}
+
+/**
+ * Fetch calendar events from a specific grant (calendar account)
+ * @param grantId - The Nylas grant ID for the calendar account
+ * @param calendarId - Optional specific calendar ID, or 'primary' for default calendar
+ * @param startTime - Unix timestamp for start of time range (default: now)
+ * @param endTime - Unix timestamp for end of time range (default: 30 days from now)
+ * @param limit - Maximum number of events to fetch (default: 50)
+ */
+export const fetchCalendarEvents = async (
+    grantId: string,
+    calendarId?: string,
+    startTime?: number,
+    endTime?: number,
+    limit: number = 50
+): Promise<NylasCalendarEvent[]> => {
+    try {
+        const now = Math.floor(Date.now() / 1000);
+        const thirtyDaysFromNow = now + (30 * 24 * 60 * 60);
+        
+        const start = startTime || now;
+        const end = endTime || thirtyDaysFromNow;
+        
+        console.log('[Nylas] Fetching calendar events...');
+        console.log('[Nylas] Grant ID:', grantId);
+        console.log('[Nylas] Calendar ID:', calendarId || 'All calendars');
+        console.log('[Nylas] Time range:', new Date(start * 1000).toISOString(), 'to', new Date(end * 1000).toISOString());
+        console.log('[Nylas] Limit:', limit);
+        
+        // Get calendar ID if not provided
+        let targetCalendarId = calendarId;
+        if (!targetCalendarId) {
+            // Fetch calendars to get primary calendar ID
+            const calendars = await fetchCalendars(grantId);
+            const primaryCalendar = calendars.find(cal => cal.is_primary) || calendars[0];
+            if (!primaryCalendar) {
+                throw new Error('No calendars found for this grant');
+            }
+            targetCalendarId = primaryCalendar.id;
+            console.log('[Nylas] Using calendar ID:', targetCalendarId);
+        }
+
+        const params: any = {
+            limit,
+            start: start,
+            end: end,
+            calendar_id: targetCalendarId, // calendar_id is required by Nylas API
+        };
+
+        const url = `${NYLAS_API_URL}/v3/grants/${grantId}/events`;
+        console.log('[Nylas] API URL:', url);
+        console.log('[Nylas] Params:', JSON.stringify(params));
+
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `Bearer ${NYLAS_API_KEY}`,
+            },
+            params,
+        });
+
+        const events = response.data.data || [];
+        console.log(`[Nylas]  Successfully fetched ${events.length} calendar events`);
+        
+        if (events.length > 0) {
+            console.log('[Nylas] First event:', {
+                id: events[0].id,
+                title: events[0].title,
+                when: events[0].when
+            });
+        }
+
+        return events;
+    } catch (error: any) {
+        console.error('[Nylas]  Error fetching calendar events:');
+        console.error('[Nylas] Status:', error.response?.status);
+        console.error('[Nylas] Status Text:', error.response?.statusText);
+        console.error('[Nylas] Response Data:', JSON.stringify(error.response?.data, null, 2));
+        console.error('[Nylas] Error Message:', error.message);
+        throw new Error(`Failed to fetch calendar events: ${error.response?.data?.message || error.message}`);
+    }
+};
+
+/**
+ * Fetch all calendars for a grant
+ * @param grantId - The Nylas grant ID
+ */
+export const fetchCalendars = async (grantId: string): Promise<any[]> => {
+    try {
+        console.log('[Nylas] Fetching calendars for grant:', grantId);
+        
+        const url = `${NYLAS_API_URL}/v3/grants/${grantId}/calendars`;
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `Bearer ${NYLAS_API_KEY}`,
+            },
+        });
+
+        const calendars = response.data.data || [];
+        console.log(`[Nylas]  Successfully fetched ${calendars.length} calendars`);
+        
+        return calendars;
+    } catch (error: any) {
+        console.error('[Nylas]  Error fetching calendars:');
+        console.error('[Nylas] Status:', error.response?.status);
+        console.error('[Nylas] Response Data:', JSON.stringify(error.response?.data, null, 2));
+        console.error('[Nylas] Error Message:', error.message);
+        throw new Error(`Failed to fetch calendars: ${error.response?.data?.message || error.message}`);
+    }
+};

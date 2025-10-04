@@ -10,7 +10,10 @@ import commentRoutes from "./src/routes/commentRoutes";
 import meetingRoutes from "./src/routes/meetingRoutes";
 import notetakerRoutes from "./src/routes/notetakerRoutes";
 import emailRoutes from "./src/routes/emailRoutes";
+import calendarRoutes from "./src/routes/calendarRoutes";
+import eventAssetRoutes from "./src/routes/eventAssetRoutes";
 import { startEmailScheduler } from './src/services/emailSchedulerService';
+import { startCalendarScheduler } from './src/services/calendarSchedulerService';
 
 dotenv.config();
 
@@ -18,11 +21,12 @@ const app = express();
 
 // Connect to database
 connectDB().then(() => {
-    // Start email scheduler after database connection is established
-    console.log(' Database connected, starting email scheduler...');
+    // Start schedulers after database connection is established
+    console.log(' Database connected, starting schedulers...');
     startEmailScheduler();
+    startCalendarScheduler();
 }).catch(err => {
-    console.error(' Database connection failed, email scheduler not started');
+    console.error(' Database connection failed, schedulers not started');
 });
 
 app.use(cors({
@@ -45,6 +49,8 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/notetaker', notetakerRoutes);
 app.use('/api/emails', emailRoutes);
+app.use('/api/calendar', calendarRoutes);
+app.use('/api/event-assets', eventAssetRoutes);
 
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error(err.stack);
@@ -63,4 +69,6 @@ app.listen(PORT, () => {
     console.log(`  - Comments: http://localhost:${PORT}/api/comments`);
     console.log(`  - Meetings: http://localhost:${PORT}/api/meetings`);
     console.log(`  - Emails: http://localhost:${PORT}/api/emails`);
+    console.log(`  - Calendar: http://localhost:${PORT}/api/calendar`);
+    console.log(`  - Event Assets: http://localhost:${PORT}/api/event-assets`);
 });

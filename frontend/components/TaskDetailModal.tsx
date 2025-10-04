@@ -29,7 +29,7 @@ interface Task {
     description: string;
     status: "pending" | "completed";
     priority: "low" | "medium" | "high";
-    dueDate: string;
+    dueDate: string | null;
     createdAt: string;
     assignedTo?: AssignedUser | null;
     isPrivate?: boolean;
@@ -275,8 +275,11 @@ export default function TaskDetailModal({
         }
     };
 
-    const formatDateTime = (dateString: string): string => {
+    const formatDateTime = (dateString: string | null): string | null => {
+        if (!dateString) return null;
         const date = new Date(dateString);
+        // Check for invalid date
+        if (isNaN(date.getTime())) return null;
         return date.toLocaleString("en-US", {
             month: "short",
             day: "numeric",
@@ -287,8 +290,11 @@ export default function TaskDetailModal({
         });
     };
 
-    const formatDateForInput = (dateString: string): string => {
+    const formatDateForInput = (dateString: string | null): string => {
+        if (!dateString) return "";
         const date = new Date(dateString);
+        // Check for invalid date
+        if (isNaN(date.getTime())) return "";
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, "0");
         const day = String(date.getDate()).padStart(2, "0");
@@ -531,7 +537,7 @@ export default function TaskDetailModal({
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className="text-gray-400 text-sm">
-                                        Due Date
+                                        Due Date <span className="text-gray-500 text-xs">(Optional)</span>
                                     </span>
                                     {isEditingTask ? (
                                         <input
@@ -539,19 +545,18 @@ export default function TaskDetailModal({
                                             value={formatDateForInput(
                                                 editedTask.dueDate
                                             )}
-                                            onChange={(e) =>
+                                            onChange={(e) => {
+                                                const value = e.target.value;
                                                 setEditedTask({
                                                     ...editedTask,
-                                                    dueDate: new Date(
-                                                        e.target.value
-                                                    ).toISOString(),
-                                                })
-                                            }
+                                                    dueDate: value ? new Date(value).toISOString() : null,
+                                                });
+                                            }}
                                             className="bg-white/5 border border-white/10 rounded px-3 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                                         />
                                     ) : (
                                         <span className="text-white text-sm">
-                                            {formatDateTime(task.dueDate)}
+                                            {task.dueDate && formatDateTime(task.dueDate) ? formatDateTime(task.dueDate) : "No due date set"}
                                         </span>
                                     )}
                                 </div>

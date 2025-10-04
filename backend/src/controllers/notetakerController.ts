@@ -348,6 +348,8 @@ async function processTranscript(sessionId: string, transcriptUrl: string): Prom
             description: analysis.description,
             summary: analysis.summary,
             actionItems: analysis.actionItems,
+            tags: analysis.tags || [],
+            internalTags: analysis.internalTags || [],
             fileUrl: dataUrl,
             fileName: `${session.meetingTitle || 'Meeting Transcript'}.txt`,
             fileSize: transcriptText.length,
