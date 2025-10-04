@@ -5,6 +5,8 @@ export interface IMeeting extends Document {
     description?: string;
     summary?: string;
     actionItems?: string[];
+    tags?: string[];
+    internalTags?: string[];
     fileUrl: string;
     fileName: string;
     fileSize: number;
@@ -32,6 +34,14 @@ const meetingSchema = new Schema<IMeeting>(
             trim: true
         },
         actionItems: {
+            type: [String],
+            default: []
+        },
+        tags: {
+            type: [String],
+            default: []
+        },
+        internalTags: {
             type: [String],
             default: []
         },
@@ -64,5 +74,7 @@ const meetingSchema = new Schema<IMeeting>(
 
 meetingSchema.index({ createdAt: -1 });
 meetingSchema.index({ uploadedBy: 1 });
+meetingSchema.index({ tags: 1 });
+meetingSchema.index({ internalTags: 1 });
 
 export default mongoose.model<IMeeting>('Meeting', meetingSchema);

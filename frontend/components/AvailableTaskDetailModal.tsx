@@ -14,7 +14,7 @@ interface Task {
     description: string;
     status: "pending" | "completed";
     priority: "low" | "medium" | "high";
-    dueDate: string;
+    dueDate: string | null;
     createdAt: string;
     assignedTo?: AssignedUser | null;
     isPrivate?: boolean;
@@ -88,8 +88,11 @@ export default function AvailableTaskDetailModal({
         }
     };
 
-    const formatDateTime = (dateString: string): string => {
+    const formatDateTime = (dateString: string | null): string | null => {
+        if (!dateString) return null;
         const date = new Date(dateString);
+        // Check for invalid date
+        if (isNaN(date.getTime())) return null;
         return date.toLocaleString("en-US", {
             month: "short",
             day: "numeric",
@@ -186,14 +189,16 @@ export default function AvailableTaskDetailModal({
                                         {task.priority}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-gray-400 text-sm">
-                                        Due Date
-                                    </span>
-                                    <span className="text-white text-sm">
-                                        {formatDateTime(task.dueDate)}
-                                    </span>
-                                </div>
+                                {task.dueDate && formatDateTime(task.dueDate) && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-400 text-sm">
+                                            Due Date
+                                        </span>
+                                        <span className="text-white text-sm">
+                                            {formatDateTime(task.dueDate)}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Description Section */}

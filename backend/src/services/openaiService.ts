@@ -14,6 +14,8 @@ export interface MeetingAnalysis {
     description: string;
     summary: string;
     actionItems: string[];
+    tags: string[];
+    internalTags: string[];
 }
 
 /**
@@ -76,7 +78,9 @@ ${memberFilteringInstruction}
   "title": "string, max 100 characters",
   "description": "string, max 500 characters",
   "summary": "string, comprehensive but concise summary of the meeting",
-  "actionItems": ["array of specific, actionable tasks${hasMemberContext ? ' - ONLY for organization members listed above' : ''}"]
+  "actionItems": ["array of specific, actionable tasks${hasMemberContext ? ' - ONLY for organization members listed above' : ''}"],
+  "tags": ["array of 3-7 relevant tags for categorization and search"],
+  "internalTags": ["array of system-generated tags for internal use - see rules below"]
 }
 
 2. Extraction priorities:
@@ -84,6 +88,24 @@ ${memberFilteringInstruction}
 - "description": Brief overview highlighting outcomes and decisions
 - "summary": Prioritize decisions made, agreements, and conclusions
 - "actionItems": CRITICAL - See detailed extraction rules below
+- "tags": Generate 3-7 relevant, searchable tags:
+  * Include topic categories (Budget, Marketing, Product, HR, Engineering, etc.)
+  * Include meeting types (Planning, Review, Standup, Retrospective, Strategy, etc.)
+  * Include project names if mentioned
+  * Include key themes (Decision Made, Blocked, Needs Follow-up, etc.)
+  * Use title case (e.g., "Q4 Planning" not "q4 planning")
+  * Keep concise (1-3 words each)
+  * Avoid generic tags like "Meeting" or "Discussion"
+- "internalTags": Generate internal system tags (not shown to users):
+  * Add "follow-up-required" if meeting needs follow-up or has unresolved items
+  * Add "decision-made" if significant decisions were made
+  * Add topic similarity tags like "tech-discussion", "budget-planning", "hr-matters", "product-roadmap", etc.
+  * Add "recurring-topic-[topic]" if this seems like a recurring meeting type
+  * Add "action-heavy" if 5+ action items
+  * Add "review-meeting" if this reviews previous work/decisions
+  * Add "planning-meeting" if this is about future planning
+  * Add "urgent" if urgency is mentioned multiple times
+  * Use lowercase with hyphens (e.g., "follow-up-required" not "Follow Up Required")
 
 ### ACTION ITEM EXTRACTION - HIGHEST PRIORITY ###
 
@@ -272,6 +294,19 @@ ${content}`;
 
         if (!Array.isArray(analysis.actionItems)) {
             analysis.actionItems = [];
+        }
+
+        if (!Array.isArray(analysis.tags)) {
+            analysis.tags = [];
+        }
+
+        // Limit tags to 7 maximum
+        if (analysis.tags.length > 7) {
+            analysis.tags = analysis.tags.slice(0, 7);
+        }
+
+        if (!Array.isArray(analysis.internalTags)) {
+            analysis.internalTags = [];
         }
 
         return analysis;
@@ -753,5 +788,110 @@ ${hasMemberContext ? `- Check if any organization member name is mentioned for t
             console.error('[OpenAI] Error stack:', error.stack);
         }
         throw new Error('Failed to extract task from email');
+    }
+};
+
+/**
+ * Translation result interface
+ */
+export interface TranslationResult {
+    translatedTitle: string;
+    translatedDescription: string;
+    translatedSummary: string;
+    translatedActionItems: string[];
+    detectedSourceLanguage: string;
+    targetLanguage: string;
+}
+
+/**
+ * Translate meeting notes to a target language using GPT-4o
+ */
+export const translateMeetingNotes = async (
+    title: string,
+    description: string,
+    summary: string,
+    actionItems: string[],
+    targetLanguage: string = 'English'
+): Promise<TranslationResult> => {
+    try {
+        console.log('[OpenAI] Starting meeting notes translation...');
+        console.log('[OpenAI] Target Language:', targetLanguage);
+        console.log('[OpenAI] Content length:', {
+            title: title.length,
+            description: description.length,
+            summary: summary.length,
+            actionItems: actionItems.length
+        });
+
+        const systemPrompt = `You are a professional translator specializing in business and meeting content translation.
+
+Your task is to translate meeting notes, summaries, and action items to ${targetLanguage}.
+
+TRANSLATION GUIDELINES:
+1. Maintain professional tone and business context
+2. Preserve technical terms, product names, and proper nouns when appropriate
+3. Keep the meaning and intent intact
+4. Ensure natural-sounding translations in the target language
+5. Maintain the structure and formatting
+6. If the content is already in ${targetLanguage}, return it as-is but still detect the source language
+
+OUTPUT FORMAT:
+You must respond with a valid JSON object containing:
+{
+  "translatedTitle": "translated title text",
+  "translatedDescription": "translated description text",
+  "translatedSummary": "translated summary text",
+  "translatedActionItems": ["translated action item 1", "translated action item 2", ...],
+  "detectedSourceLanguage": "detected source language name",
+  "targetLanguage": "${targetLanguage}"
+}`;
+
+        const userPrompt = `Please translate the following meeting notes to ${targetLanguage}:
+
+TITLE:
+${title}
+
+DESCRIPTION:
+${description}
+
+SUMMARY:
+${summary}
+
+ACTION ITEMS:
+${actionItems.map((item, idx) => `${idx + 1}. ${item}`).join('\n')}
+
+Respond with the translation in the specified JSON format.`;
+
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.3,
+        });
+
+        const responseContent = completion.choices[0]?.message?.content;
+        
+        if (!responseContent) {
+            throw new Error('No response from OpenAI');
+        }
+
+        console.log('[OpenAI] Raw translation response:', responseContent.substring(0, 200) + '...');
+
+        const translation = JSON.parse(responseContent) as TranslationResult;
+
+        console.log('[OpenAI]  Translation completed successfully');
+        console.log('[OpenAI] Detected source language:', translation.detectedSourceLanguage);
+        console.log('[OpenAI] Target language:', translation.targetLanguage);
+
+        return translation;
+    } catch (error) {
+        console.error('[OpenAI]  Error translating meeting notes:', error);
+        if (error instanceof Error) {
+            console.error('[OpenAI] Error stack:', error.stack);
+        }
+        throw new Error('Failed to translate meeting notes');
     }
 };

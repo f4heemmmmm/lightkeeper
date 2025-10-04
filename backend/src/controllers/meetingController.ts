@@ -1,7 +1,7 @@
 import Meeting from '../models/Meeting';
 import Task from '../models/Task';
 import { Request, Response } from 'express'; 
-import { analyzeMeetingNotes } from '../services/openaiService';
+import { analyzeMeetingNotes, translateMeetingNotes } from '../services/openaiService';
 
 /**
  * Decode base64 content with proper UTF-8 handling
@@ -24,7 +24,7 @@ export const getAllMeetings = async (req: Request, res: Response): Promise<void>
     try {
         const meetings = await Meeting.find()
             .sort({ createdAt: -1 })
-            .select('title description summary actionItems fileName fileSize fileUrl uploaderName createdAt');
+            .select('title description summary actionItems tags internalTags fileName fileSize fileUrl uploaderName createdAt');
         
         res.status(200).json(meetings);
     } catch (error) {
@@ -81,6 +81,8 @@ export const createMeeting = async (req: Request, res: Response): Promise<void> 
             description: analysis.description,
             summary: analysis.summary,
             actionItems: analysis.actionItems,
+            tags: analysis.tags || [],
+            internalTags: analysis.internalTags || [],
             fileUrl,
             fileName,
             fileSize,
@@ -301,5 +303,57 @@ export const debugMeeting = async (req: Request, res: Response): Promise<void> =
         });
     } catch (error) {
         res.status(500).json({ message: 'Error debugging meeting', error });
+    }
+};
+/**
+ * Translate meeting notes to a target language
+ */
+export const translateMeeting = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { targetLanguage } = req.body;
+
+        if (!targetLanguage) {
+            res.status(400).json({ message: 'Target language is required' });
+            return;
+        }
+
+        console.log(`[Translation] Translating meeting ${id} to ${targetLanguage}`);
+
+        const meeting = await Meeting.findById(id);
+        
+        if (!meeting) {
+            res.status(404).json({ message: 'Meeting not found' });
+            return;
+        }
+
+        // Translate the meeting notes
+        const translation = await translateMeetingNotes(
+            meeting.title,
+            meeting.description || '',
+            meeting.summary || '',
+            meeting.actionItems || [],
+            targetLanguage
+        );
+
+        console.log(`[Translation] Successfully translated meeting ${id}`);
+
+        res.status(200).json({
+            message: 'Translation completed successfully',
+            translation: {
+                title: translation.translatedTitle,
+                description: translation.translatedDescription,
+                summary: translation.translatedSummary,
+                actionItems: translation.translatedActionItems,
+                detectedSourceLanguage: translation.detectedSourceLanguage,
+                targetLanguage: translation.targetLanguage
+            }
+        });
+    } catch (error) {
+        console.error('[Translation] Error translating meeting:', error);
+        res.status(500).json({ 
+            message: 'Error translating meeting', 
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 };

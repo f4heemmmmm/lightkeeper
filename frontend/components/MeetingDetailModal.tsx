@@ -1,6 +1,7 @@
 import { Trash2, X } from "lucide-react";
 import MeetingChatbot from "./meeting-modal/MeetingChatbot";
 import MeetingDetails from "./meeting-modal/MeetingDetails";
+import MeetingSimilarCarousel from "./meeting-modal/MeetingSimilarCarousel";
 
 interface Meeting {
     _id: string;
@@ -8,6 +9,8 @@ interface Meeting {
     description?: string;
     summary?: string;
     actionItems?: string[];
+    tags?: string[];
+    internalTags?: string[];
     fileName: string;
     fileSize: number;
     fileUrl: string;
@@ -21,6 +24,8 @@ interface MeetingDetailModalProps {
     isLoadingContent: boolean;
     onClose: () => void;
     onDelete: (id: string) => void;
+    allMeetings?: Meeting[];
+    onMeetingSelect?: (meeting: Meeting) => void;
 }
 
 export default function MeetingDetailModal({
@@ -29,6 +34,8 @@ export default function MeetingDetailModal({
     isLoadingContent,
     onClose,
     onDelete,
+    allMeetings,
+    onMeetingSelect,
 }: MeetingDetailModalProps) {
     return (
         <>
@@ -61,19 +68,30 @@ export default function MeetingDetailModal({
                         </div>
                     </div>
                     {/* Modal Body */}
-                    <div className="flex flex-1 overflow-hidden">
-                        {/* Meeting Details Section - Left Side */}
-                        <MeetingDetails
-                            meeting={meeting}
-                            fileContent={fileContent}
-                            isLoadingContent={isLoadingContent}
-                        />
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                        <div className="flex flex-1 overflow-hidden">
+                            {/* Meeting Details Section - Left Side */}
+                            <MeetingDetails
+                                meeting={meeting}
+                                fileContent={fileContent}
+                                isLoadingContent={isLoadingContent}
+                            />
 
-                        {/* Chatbot Section - Right Side */}
-                        <MeetingChatbot
-                            meetingId={meeting._id}
-                            meetingTitle={meeting.title}
-                        />
+                            {/* Chatbot Section - Right Side */}
+                            <MeetingChatbot
+                                meetingId={meeting._id}
+                                meetingTitle={meeting.title}
+                            />
+                        </div>
+                        
+                        {/* Similar Meetings Carousel - Bottom */}
+                        {allMeetings && onMeetingSelect && (
+                            <MeetingSimilarCarousel
+                                currentMeeting={meeting}
+                                allMeetings={allMeetings}
+                                onMeetingSelect={onMeetingSelect}
+                            />
+                        )}
                     </div>
                 </div>
             </div>

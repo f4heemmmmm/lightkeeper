@@ -5,7 +5,8 @@ import {
   createMeeting,
   updateMeeting,
   deleteMeeting,
-  createTasksFromExistingMeetings
+  createTasksFromExistingMeetings,
+  translateMeeting
 } from '../controllers/meetingController';
 import { protect } from '../middleware/auth';
 
@@ -17,5 +18,6 @@ router.post('/', protect, createMeeting);
 router.put('/:id', protect, updateMeeting);
 router.delete('/:id', protect, deleteMeeting);
 router.post('/migrate-tasks', protect, createTasksFromExistingMeetings);
+router.post('/:id/translate', protect, translateMeeting);
 
 export default router;
