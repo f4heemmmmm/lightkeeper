@@ -23,6 +23,7 @@ export const analyzeMeetingNotes = async (
     content: string,
     organizationMembers?: OrganizationMember[]
 ): Promise<MeetingAnalysis> => {
+    // ... keep existing implementation unchanged
     try {
         // Build the member context for the AI
         const hasMemberContext = organizationMembers && organizationMembers.length > 0;
@@ -242,7 +243,6 @@ Meeting content:
 
 ${content}`;
 
-        // Rest of the function remains the same...
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -286,8 +286,9 @@ export interface ExtractedTask {
     title?: string;
     description?: string;
     priority?: 'low' | 'medium' | 'high';
-    dueDate?: string; // ISO date string if found
+    dueDate?: string; // ISO datetime string if found (YYYY-MM-DDTHH:mm:ss.sssZ) or just date (YYYY-MM-DD)
     confidence?: number; // 0-1 confidence score
+    assignedToName?: string; // Name of the person the task is assigned to
 }
 
 /**
@@ -295,11 +296,13 @@ export interface ExtractedTask {
  * @param emailSubject - The subject line of the email
  * @param emailBody - The body content of the email
  * @param emailFrom - Who sent the email
+ * @param organizationMembers - List of organization members for assignment matching
  */
 export const extractTaskFromEmail = async (
     emailSubject: string,
     emailBody: string,
-    emailFrom?: string
+    emailFrom?: string,
+    organizationMembers?: OrganizationMember[]
 ): Promise<ExtractedTask> => {
     try {
         console.log('[OpenAI] Analyzing email for tasks...');
@@ -311,12 +314,178 @@ export const extractTaskFromEmail = async (
         const now = new Date();
         const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
         const currentDateTime = now.toISOString();
+        const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
         
-        console.log('[OpenAI] Current date for context:', currentDate);
+        console.log('[OpenAI] Current date for context:', currentDate, `(${dayOfWeek})`);
+        
+        // Build member context if available
+        const hasMemberContext = organizationMembers && organizationMembers.length > 0;
+        const memberList = hasMemberContext 
+            ? organizationMembers.map(m => `- ${m.name} (${m.email})`).join('\n')
+            : '';
+        
+        const assignmentInstructions = hasMemberContext ? `
+
+### TASK ASSIGNMENT DETECTION ###
+
+**Organization Members Available for Assignment:**
+${memberList}
+
+**Assignment Detection Rules:**
+1. Look for phrases that indicate WHO should do the task:
+   - "reminder for [Name] to..."
+   - "[Name] needs to..."
+   - "[Name] should..."
+   - "can [Name]..."
+   - "have [Name]..."
+   - "tell [Name] to..."
+   - "ask [Name] to..."
+   - "get [Name] to..."
+   - "[Name], please..."
+   - "[Name] will..."
+   
+2. **Name Matching Strategy:**
+   - Match first names, last names, or full names
+   - Be flexible with variations (e.g., "Riya" matches "Riya Patel")
+   - Handle common nicknames (e.g., "Mike" for "Michael")
+   - Case-insensitive matching
+   
+3. **Extract the assignee's name** from the organization members list:
+   - If you find a match, include the EXACT name from the organization members list in the "assignedToName" field
+   - If no match or no assignment mentioned, set "assignedToName" to null
+   
+4. **Examples:**
+   - "Reminder for Riya to submit the report" → assignedToName: "Riya" (if Riya is in the member list)
+   - "Can Sarah review this document?" → assignedToName: "Sarah" (if Sarah is in the member list)
+   - "Please have John call the client" → assignedToName: "John" (if John is in the member list)
+   - "Submit the report by Friday" → assignedToName: null (no specific person mentioned)
+   - "Reminder for Bob to..." → assignedToName: null (if Bob is NOT in the member list)
+
+**CRITICAL**: Only set assignedToName if:
+1. A specific person is mentioned in the email
+2. That person exists in the organization members list above
+3. The mention indicates they should perform the task` : '';
         
         const systemPrompt = `### Instruction ###
 You are an AI assistant specialized in analyzing emails to identify actionable tasks.
 Your task is to determine if an email contains a task or action item, and if so, extract structured task information.
+${assignmentInstructions}
+
+### CRITICAL: EMAIL FILTERING - EXCLUDE NON-TASK EMAILS ###
+
+**IMMEDIATELY REJECT these email types (set hasTask=false, confidence=0):**
+
+1. **Automated/System Emails:**
+   - From: noreply@, no-reply@, donotreply@, notifications@, automated@, support@
+   - Email contains: "This is an automated message", "Do not reply to this email"
+   - Subject lines: "Automated:", "System:", "[Automated]", "Do not reply"
+   - Common automated senders: GitHub, Jira, Slack notifications, calendar reminders without action items
+   
+2. **Newsletters & Marketing:**
+   - Subject contains: "Newsletter", "Weekly Digest", "Monthly Update", "Roundup", "Top Stories"
+   - Promotional language: "Sale", "Discount", "Limited Time", "Offer Expires", "Buy Now", "Shop Now", "% Off"
+   - Multiple product listings or promotional links
+   - Prominent "Unsubscribe" links or "View in browser" links
+   - Marketing footers with company addresses and legal disclaimers
+   - Email is primarily HTML with lots of images and CTAs
+   
+3. **Transactional/Confirmations:**
+   - Order confirmations: "Your order", "Order #", "Purchase confirmation", "Receipt"
+   - Shipping updates: "has shipped", "tracking number", "delivered", "out for delivery"
+   - Password resets: "reset your password", "verification code", "confirm your email"
+   - Account notifications: "Your account", "security alert", "login detected"
+   - Subscription confirmations: "You're now subscribed", "Welcome to"
+   
+4. **Social Media Notifications:**
+   - From: Facebook, Twitter, LinkedIn, Instagram, TikTok, Reddit, etc.
+   - "X liked your post", "You have a new follower", "Someone commented"
+   - "Someone mentioned you", "New connection request"
+   
+5. **Calendar/Meeting Auto-responses:**
+   - "Out of office", "Automatic reply", "Away from desk"
+   - "I am currently unavailable"
+   - Simple meeting accepted/declined without additional context or follow-up requests
+   - "Calendar event reminder" without actionable content
+   
+6. **Pure Information (FYI) Emails:**
+   - Subject starts with "FYI:", "For your information", "Heads up"
+   - Body is ONLY sharing links, articles, or documents without requesting action
+   - No questions, no requests, no deadlines, no call to action
+   - Simply forwarding information with no added context
+   
+7. **Acknowledgment-only replies:**
+   - "Thanks!", "Thank you", "Got it", "Received", "Noted", "Acknowledged"
+   - "Will do" without context of what will be done
+   - "Sounds good", "Perfect", "Great"
+   - Single word/phrase responses: "Yes", "No", "OK", "Sure"
+
+8. **Spam/Promotional:**
+   - Subject in ALL CAPS or with excessive punctuation (!!!, $$$)
+   - Phrases like "Make money", "Work from home", "Free trial"
+   - Obvious phishing attempts
+
+**BORDERLINE CASES - Require HIGH confidence (0.8+):**
+- Emails with both informational and actionable content (extract only the actionable part)
+- Forwarded emails (check if forwarding message adds action context)
+- "Just checking in" emails (only task if there's a specific ask)
+- Meeting invites (only task if they require preparation or confirmation beyond just attending)
+
+**DETECTION STRATEGY:**
+
+**Step 1 - Sender Analysis:**
+- Check the 'From' field for automated patterns (noreply, notifications, automated)
+- If sender is automated → REJECT immediately (hasTask=false, confidence=0)
+
+**Step 2 - Subject Line Scan:**
+- Look for newsletter/marketing keywords
+- Check for transactional patterns (order, shipping, confirmation, receipt)
+- If matches exclusion patterns → REJECT immediately
+
+**Step 3 - Content Pattern Analysis:**
+- Scan for unsubscribe links (strong newsletter indicator)
+- Check for promotional CTAs and multiple product links
+- Look for "This is an automated message" text
+- Check for out-of-office auto-reply patterns
+- If primarily marketing/automated content → REJECT
+
+**Step 4 - Actionability Test:**
+- Is there a SPECIFIC action requested?
+- Is there a PERSON who needs to do something?
+- Is there a DEADLINE or urgency indicator?
+- Can this be completed as a discrete task?
+
+**If ANY of steps 1-3 trigger rejection → hasTask=false, confidence=0**
+**If step 4 has fewer than 2 YES answers → hasTask=false, confidence < 0.5**
+
+### TASK IDENTIFICATION - WHAT QUALIFIES ###
+
+**Valid task emails have ALL of these:**
+1. Clear, specific action required (not just "be aware" or "FYI")
+2. Identifiable owner (even if implicit: "you", "team", specific person)
+3. Completable outcome (not open-ended discussion)
+
+**Valid task emails have AT LEAST ONE of these:**
+1. Explicit request: "can you", "please", "need you to", "could you"
+2. Deadline mentioned: "by Friday", "before the meeting", "ASAP", "EOD"
+3. Question requiring action: "Can you send...", "Will you review..."
+4. Assignment: "You are responsible for...", "Your task is..."
+5. Reminder of pending action: "Reminder to...", "Don't forget to..."
+
+**CONFIDENCE CALIBRATION:**
+
+- 0.9-1.0: Explicit task with clear assignment and deadline
+  Example: "Can you review the Q4 budget by Friday?"
+  
+- 0.7-0.89: Clear task but missing one element (no deadline OR no explicit assignment)
+  Example: "Please update the client on project status"
+  
+- 0.5-0.69: Implied task with some ambiguity
+  Example: "We should probably update the documentation soon"
+  
+- Below 0.5: Not a task OR too much ambiguity
+  Example: "FYI - here's the latest report" (informational only)
+
+**IMPORTANT**: Default to hasTask=false unless you can clearly identify a specific, actionable task. It's better to miss an edge case than to create tasks from newsletters, marketing emails, or informational messages.
 
 ### Requirements ###
 1. Generate output in valid JSON with the following structure:
@@ -325,18 +494,12 @@ Your task is to determine if an email contains a task or action item, and if so,
   "title": "string, max 100 characters (only if hasTask is true)",
   "description": "string, max 500 characters (only if hasTask is true)",
   "priority": "low" | "medium" | "high" (only if hasTask is true)",
-  "dueDate": "ISO date string if mentioned, null otherwise",
-  "confidence": number between 0 and 1
+  "dueDate": "ISO date string YYYY-MM-DD if mentioned, null otherwise",
+  "confidence": number between 0 and 1,
+  "assignedToName": "string - exact name from organization members list, or null"
 }
 
-2. Task identification criteria:
-- Look for explicit requests, assignments, or calls to action
-- Common indicators: "please", "can you", "need you to", "by [date]", "deadline", "urgent", "asap"
-- Distinguish between informational emails and actionable requests
-- Calendar invites, meeting requests, and RSVPs can be tasks if they require action
-- Follow-up requests are tasks
-
-3. Task extraction priorities:
+2. Task extraction priorities:
 - "title": Create a clear, concise task title that captures the main action (e.g., "Review Q4 budget proposal", "Send contract to client")
 - "description": Provide a comprehensive summary including:
   * What needs to be done
@@ -344,71 +507,93 @@ Your task is to determine if an email contains a task or action item, and if so,
   * Any specific requirements or details
   * Why this matters (if mentioned)
   * Note: Keep it clear and actionable
-- "priority": CRITICAL - Carefully assess and justify priority based on:
-  - "high": Urgent language (ASAP, urgent, critical, STAT), tight deadlines (today, tomorrow, by end of day), executive/VIP requests, time-sensitive business impact, explicit urgency markers
-  - "medium": Standard business requests, reasonable timeframes (this week, next few days), normal work priority, some time sensitivity but not critical
-  - "low": No deadline mentioned, routine tasks, informational with optional action, flexible timing, no urgency indicators, "when you get a chance" type requests
-- "dueDate": CRITICAL - Only extract dates that are EXPLICITLY mentioned in the email
-  - DO NOT make up or assume dates if not mentioned
-  - DO NOT generate arbitrary future dates
-  - If NO date is mentioned, set to null
-  - If a date IS mentioned, convert to ISO format (YYYY-MM-DD)
-  - For relative dates (e.g., "Friday", "tomorrow", "next week"), use the current date provided to calculate the actual date
-  - For partial dates (e.g., "the 15th" without month), use current month/year to complete it
-  - Examples:
-    * "by Friday" → Calculate which Friday is next from current date
-    * "tomorrow" → Current date + 1 day
-    * "next Monday" → Calculate next Monday from current date
-    * "by the 15th" → Use current month and year, day 15
-    * "by December 25th" → Use current year, December 25
-    * "NO MENTION" → null (DO NOT GENERATE)
+- "priority": CRITICAL - Carefully assess priority:
+  - "high": Urgent language (ASAP, urgent, critical, STAT, immediately), tight deadlines (today, tomorrow, by end of day, this afternoon), executive/VIP requests, time-sensitive business impact, explicit urgency markers
+  - "medium": Standard business requests, reasonable timeframes (this week, next few days, by end of week), normal work priority, some time sensitivity but not critical
+  - "low": No deadline mentioned, routine tasks, informational with optional action, flexible timing (next week, when you can, no rush), no urgency indicators, "when you get a chance" type requests
+- "dueDate": **CRITICAL - DUE DATE AND TIME EXTRACTION RULES**
+  - **ONLY extract dates/times that are EXPLICITLY mentioned in the email**
+  - **DO NOT make up or assume dates/times if not mentioned**
+  - **DO NOT generate arbitrary future dates/times**
+  - **If NO date/deadline is mentioned, MUST set to null**
+  - **If a date IS mentioned, convert to ISO format**
+  
+**FORMAT RULES:**
+  - If BOTH date AND time mentioned: ISO datetime format WITHOUT timezone (YYYY-MM-DDTHH:mm:ss)
+    * Use 24-hour format for time
+    * Assume the user's local timezone (do NOT convert to UTC, do NOT add 'Z')
+    * Examples: "2025-03-15T14:30:00", "2025-03-15T09:00:00"
+  - If ONLY date mentioned (no time): ISO date format (YYYY-MM-DD)
+    * Examples: "2025-03-15", "2025-12-25"
+  - If ONLY time mentioned (no date): Use TODAY's date + the specified time
+    * "3pm today" → "2025-10-04T15:00:00Z" (using current date ${currentDate})
+  
+  **Relative Date Calculation (use current date: ${currentDate}, ${dayOfWeek}):**
+  - "today" → ${currentDate}
+  - "tomorrow" → calculate next day from ${currentDate}
+  - "Friday", "Monday", etc. → calculate next occurrence of that day from ${currentDate}
+  - "next Friday" → calculate Friday in the next week
+  - "this Friday" → calculate closest upcoming Friday
+  - "end of day" / "EOD" → ${currentDate} (today)
+  - "by the end of the week" → calculate upcoming Friday
+  - "next week" → calculate Monday of next week
+  - "this week" → calculate upcoming Friday of current week
+  
+  **Partial Dates (use current date: ${currentDate} for context):**
+  - "the 15th" → use current month and year, day 15 (if 15th has passed, use next month)
+  - "by the 25th" → use current month and year, day 25 (if passed, use next month)
+  - "December 15" → use current year, December 15
+  - "March 1st" → use current year, March 1 (if passed, use next year)
+  
+**Date Examples:**
+  - "by Friday" → Calculate next Friday: "2025-10-10" (just date, no time)
+  - "by the 20th" → Current month, day 20: "2025-10-20"
+  - "by end of day" → Today: "${currentDate}"
+  - "NO MENTION" → null (DO NOT GENERATE)
+  - "soon" / "ASAP" → null (no specific date)
+  
+**Date + Time Examples:**
+  - "tomorrow at 3pm" → "2025-10-05T15:00:00" (NO 'Z')
+  - "Friday at 2:30pm" → "2025-10-10T14:30:00"
+  - "by 5pm today" → "${currentDate}T17:00:00"
+  - "Monday morning at 9am" → "2025-10-06T09:00:00"
+  - "end of day tomorrow" → "2025-10-05T17:00:00" (assume 5pm)
+  - "noon on the 15th" → "2025-10-15T12:00:00"
+  
+  **Time Conversion (12-hour to 24-hour):**
+  - "3pm" → "15:00"
+  - "9am" → "09:00"
+  - "12pm" / "noon" → "12:00"
+  - "12am" / "midnight" → "00:00"
+  - "5:30pm" → "17:30"
+  
+  **Vague Times (use reasonable defaults if date is specified):**
+  - "morning" → "09:00"
+  - "afternoon" → "14:00"
+  - "evening" → "18:00"
+  - "end of day" / "EOD" → "17:00"
+  - "start of day" → "09:00"
+  
 - "confidence": How confident you are this is a VALID, ACTIONABLE task (0.0-1.0)
   - 0.9-1.0: Clear action request with explicit assignment, definite task
   - 0.7-0.89: Strong indicators of task but some ambiguity
   - 0.5-0.69: Possible task but could be informational
   - Below 0.5: Likely not a task (set hasTask to false)
-  
-### CRITICAL DECISION LOGIC ###
-Before setting hasTask to true, ask yourself:
-1. Is there a clear action required?
-2. Is someone being asked/told to do something?
-3. Is this actionable (not just informational)?
-4. Can this be completed as a specific task?
-
-If ALL answers are YES → hasTask = true (with appropriate confidence)
-If ANY answer is NO → hasTask = false
-
-Only valid, actionable tasks should result in hasTask = true.
-
-4. Edge cases and exclusions:
-- Newsletter updates, marketing emails, automated notifications: NOT tasks
-- FYI/informational emails with no action required: NOT tasks
-- Replies that are just acknowledgments: NOT tasks
-- Calendar invites: ARE tasks if they require confirmation or preparation
-- Email threads: Focus on the most recent message's intent
-
-5. Examples of VALID tasks:
-- "Can you review the attached proposal by Friday?"
-- "Please send me the updated contract"
-- "Need you to follow up with the client about payment"
-- "Reminder: Submit your timesheet by EOD"
-- "Could you prepare the presentation for Monday's meeting?"
-
-6. Examples of NOT tasks:
-- "Thanks for the update" (acknowledgment)
-- "FYI - here's the latest report" (informational)
-- "Weekly newsletter: Top 10 tips" (newsletter)
-- "Your order has shipped" (notification)
-- "Just checking in to say hi" (casual conversation)
+${hasMemberContext ? `- "assignedToName": Extract the person's name if specifically mentioned for this task
+  - Must match a name from the organization members list
+  - Use the EXACT name as it appears in the members list
+  - Set to null if no specific person is assigned or if the person is not in the members list\n` : ''}
 
 ### Output Rules ###
 - JSON must be strictly valid
-- If hasTask is false, you may omit title, description, priority, and dueDate
+- If hasTask is false, you may omit title, description, priority, dueDate, and assignedToName
 - If hasTask is true, title and description are required
 - Use the email sender's name/context when helpful for clarity
 - NEVER fabricate information; extract only what's explicitly stated or clearly implied
-- MOST IMPORTANT: Do NOT invent due dates. Only extract dates explicitly mentioned in the email
-- If no deadline is mentioned, dueDate MUST be null
+- **MOST IMPORTANT: Do NOT invent due dates. Only extract dates explicitly mentioned in the email**
+- **If no deadline is mentioned, dueDate MUST be null**
+- **Vague timeframes like "soon", "ASAP", "when you can" should result in dueDate=null**
+${hasMemberContext ? '- If a specific person is assigned, set assignedToName to their EXACT name from the members list\n- If no specific person is assigned or they are not in the members list, set assignedToName to null\n' : ''}
 
 ### Output Primer ###
 Begin your response with:
@@ -417,27 +602,63 @@ Begin your response with:
 
         const userPrompt = `Analyze the following email and determine if it contains a task.
 
-IMPORTANT: Today's date is ${currentDate} (${currentDateTime}). Use this to interpret any relative dates mentioned in the email.
+**CONTEXT:**
+- Today's date: ${currentDate} (${dayOfWeek})
+- Current time: ${currentDateTime}
+- Use this information to calculate any relative dates mentioned in the email
 
+**EMAIL TO ANALYZE:**
 From: ${emailFrom || 'Unknown'}
 Subject: ${emailSubject}
 
 Body:
 ${emailBody}
 
-DECISION CHECKLIST:
-1. Does this email contain a VALID, ACTIONABLE task? (hasTask: true/false)
-2. If YES, how confident are you? (confidence: 0.0-1.0)
-3. What is the priority level based on urgency/importance? (priority: low/medium/high)
-4. Is there an explicit deadline mentioned? (dueDate: null or YYYY-MM-DD)
+**ANALYSIS CHECKLIST:**
 
-Remember: 
-- Only set hasTask=true for VALID, ACTIONABLE tasks
-- Only extract dates that are EXPLICITLY mentioned in the email
-- If no deadline/date is mentioned, set dueDate to null
-- Use today's date (${currentDate}) to calculate relative dates like "Friday", "tomorrow", "next week", etc.
-- For partial dates like "the 15th", use the current month/year to complete the date
-- Provide a clear, comprehensive description that includes all relevant context`;
+**STEP 1 - FILTERING (Check FIRST):**
+□ Is the sender a noreply/automated/notifications address? → If YES: hasTask=false, confidence=0, STOP
+□ Does the subject contain newsletter/marketing keywords? → If YES: hasTask=false, confidence=0, STOP
+□ Is this a transactional confirmation (order, shipping, password, receipt)? → If YES: hasTask=false, confidence=0, STOP
+□ Does the body contain prominent unsubscribe links or marketing footers? → If YES: hasTask=false, confidence=0, STOP
+□ Is this just sharing information with no action requested (FYI email)? → If YES: hasTask=false, confidence=0, STOP
+□ Is this an auto-reply, out-of-office, or simple acknowledgment? → If YES: hasTask=false, confidence=0, STOP
+
+**If ANY filtering checkbox is checked → OUTPUT: hasTask=false, confidence=0, and STOP ANALYSIS**
+
+**STEP 2 - TASK VALIDATION (Only if passed all filtering):**
+□ Is there a SPECIFIC action requested? (not just "be aware")
+□ Is there an identifiable OWNER of the action? (you, team, specific person)
+□ Is the action COMPLETABLE as a discrete task? (not ongoing awareness)
+□ Is there a DEADLINE or URGENCY indicator?
+
+**Need at least 2/4 checked for hasTask=true**
+
+**STEP 3 - EXTRACTION (Only if hasTask=true):**
+1. What is the task? (hasTask: true/false)
+2. Confidence level? (confidence: 0.0-1.0)
+3. Priority based on urgency? (priority: low/medium/high)
+4. **Is there an EXPLICIT deadline/date/time mentioned?** (dueDate: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ or null)
+   - Search the entire email for date AND time references
+   - Convert relative dates using today's date (${currentDate})
+   - If time is mentioned, include it in ISO datetime format (YYYY-MM-DDTHH:mm:ssZ)
+   - If only date mentioned (no time), use ISO date format (YYYY-MM-DD)
+   - If NO date mentioned → dueDate MUST be null
+   - Do NOT create dates from vague terms like "soon", "ASAP", "when you can"
+   - Convert 12-hour time to 24-hour format (3pm → 15:00)
+${hasMemberContext ? '5. Is a specific organization member assigned? (assignedToName: exact name from members list or null)\n' : ''}
+
+**CRITICAL REMINDERS:**
+- Be CONSERVATIVE - when in doubt, set hasTask=false
+- REJECT automated, marketing, newsletter, and transactional emails immediately
+- Only set hasTask=true for clear, specific, actionable requests
+- **ONLY extract dates that are EXPLICITLY mentioned**
+- **If no date/deadline mentioned, dueDate = null (do NOT generate a date)**
+- Use today's date (${currentDate}, ${dayOfWeek}) to calculate relative dates like "Friday", "tomorrow", "next week"
+- **Extract both date AND time if time is mentioned** (e.g., "3pm" → include as "T15:00:00Z")
+- If only date mentioned, use format YYYY-MM-DD
+- If date + time mentioned, use format YYYY-MM-DDTHH:mm:ssZ
+${hasMemberContext ? `- Check if any organization member name is mentioned for this task\n- Only set assignedToName if the person is in the organization members list\n` : ''}- Provide a clear, comprehensive description with all relevant context`;
 
         console.log('[OpenAI] Sending request to GPT-4o-mini...');
         const response = await openai.chat.completions.create({
@@ -457,10 +678,10 @@ Remember:
             response_format: { type: 'json_object' }
         });
 
-        console.log('[OpenAI]  Received response from GPT');
+        console.log('[OpenAI] ✓ Received response from GPT');
         const result = response.choices[0].message.content;
         if (!result) {
-            console.error('[OpenAI]  No content in response');
+            console.error('[OpenAI] ✗ No content in response');
             throw new Error('No response from OpenAI');
         }
 
@@ -470,21 +691,22 @@ Remember:
 
         // Validate and sanitize
         if (extracted.hasTask) {
-            console.log('[OpenAI]  VALID TASK DETECTED!');
+            console.log('[OpenAI] ✓ VALID TASK DETECTED!');
             console.log('[OpenAI] Decision Details:');
             console.log(`  - Confidence: ${extracted.confidence || 0} (threshold: 0.5)`);
             console.log(`  - Priority: ${extracted.priority || 'medium'}`);
-            console.log(`  - Has Deadline: ${extracted.dueDate ? 'Yes' : 'No'}`);
+            console.log(`  - Due Date: ${extracted.dueDate || 'None'}`);
+            console.log(`  - Assigned To: ${extracted.assignedToName || 'Unassigned'}`);
             
             if (!extracted.title || !extracted.description) {
                 // If marked as hasTask but missing required fields, treat as no task
-                console.log('[OpenAI]  Task missing required fields, treating as INVALID');
+                console.log('[OpenAI] ✗ Task missing required fields, treating as INVALID');
                 return { hasTask: false, confidence: 0 };
             }
 
             // Check confidence threshold
             if ((extracted.confidence || 0) < 0.5) {
-                console.log(`[OpenAI]  Confidence too low (${extracted.confidence}), treating as INVALID`);
+                console.log(`[OpenAI] ✗ Confidence too low (${extracted.confidence}), treating as INVALID`);
                 return { hasTask: false, confidence: extracted.confidence || 0 };
             }
 
@@ -493,27 +715,40 @@ Remember:
             
             // Validate priority
             if (!['low', 'medium', 'high'].includes(extracted.priority || '')) {
-                console.log('[OpenAI]  Invalid priority, defaulting to medium');
+                console.log('[OpenAI] ⚠ Invalid priority, defaulting to medium');
                 extracted.priority = 'medium';
             }
             
-            // Log date extraction result
-            if (extracted.dueDate) {
-                console.log(`[OpenAI] Due date extracted: ${extracted.dueDate}`);
-            } else {
-                console.log('[OpenAI] No due date mentioned in email');
-            }
+            // Validate and log due date
+
+                if (extracted.dueDate) {
+                    // Validate it's either date format (YYYY-MM-DD) or datetime format (ISO 8601 without timezone)
+                    const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
+                    const dateTimeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
+                    
+                    if (dateOnlyRegex.test(extracted.dueDate)) {
+                        console.log(`[OpenAI] ✓ Due date extracted (date only): ${extracted.dueDate}`);
+                    } else if (dateTimeRegex.test(extracted.dueDate)) {
+                        console.log(`[OpenAI] ✓ Due date extracted (with time): ${extracted.dueDate}`);
+                    } else {
+                        console.log(`[OpenAI] ⚠ Invalid date/datetime format: ${extracted.dueDate}, setting to null`);
+                        extracted.dueDate = undefined;
+                    }
+                } else {
+                    console.log('[OpenAI] No due date/time mentioned in email');
+                }
             
             console.log('[OpenAI] Task validation PASSED - Will create task');
             console.log(`[OpenAI] Task Summary: "${extracted.title}" [${extracted.priority} priority]`);
         } else {
-            console.log('[OpenAI] NO VALID TASK detected in email');
-            console.log(`[OpenAI] Reason: Email is informational, not actionable, or confidence too low`);
+            console.log('[OpenAI] ✗ NO VALID TASK detected in email');
+            console.log(`[OpenAI] Reason: Email is informational, automated, marketing, or confidence too low`);
+            console.log(`[OpenAI] Confidence: ${extracted.confidence || 0}`);
         }
 
         return extracted;
     } catch (error) {
-        console.error('[OpenAI]  Error extracting task from email:', error);
+        console.error('[OpenAI] ✗ Error extracting task from email:', error);
         if (error instanceof Error) {
             console.error('[OpenAI] Error stack:', error.stack);
         }

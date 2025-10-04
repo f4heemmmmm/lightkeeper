@@ -4,6 +4,73 @@ import ProcessedEmail from '../models/ProcessedEmail';
 import { fetchEmailById } from '../services/nylasService';
 import { extractTaskFromEmail } from '../services/openaiService';
 import Task from '../models/Task';
+import User from '../models/User';
+
+/**
+ * Helper function to match assignee name to a user ID
+ */
+async function findUserByName(assigneeName: string | undefined): Promise<string | null> {
+    if (!assigneeName) return null;
+    
+    try {
+        const nameLower = assigneeName.toLowerCase().trim();
+        
+        // Find all members (not organization accounts)
+        const users = await User.find({ role: 'member' });
+        
+        // Try to match by full name, first name, or last name
+        for (const user of users) {
+            const userNameLower = user.name.toLowerCase().trim();
+            const nameParts = userNameLower.split(' ');
+            
+            // Exact match
+            if (userNameLower === nameLower) {
+                console.log(`[Assignment] ✓ Matched "${assigneeName}" to user: ${user.name} (${user.email})`);
+                return user.id;
+            }
+            
+            // First name match
+            if (nameParts.length > 0 && nameParts[0] === nameLower) {
+                console.log(`[Assignment] ✓ Matched "${assigneeName}" to user by first name: ${user.name} (${user.email})`);
+                return user.id;
+            }
+            
+            // Last name match
+            if (nameParts.length > 1 && nameParts[nameParts.length - 1] === nameLower) {
+                console.log(`[Assignment] ✓ Matched "${assigneeName}" to user by last name: ${user.name} (${user.email})`);
+                return user.id;
+            }
+            
+            // Partial match (name contains the search term)
+            if (userNameLower.includes(nameLower)) {
+                console.log(`[Assignment] ✓ Matched "${assigneeName}" to user by partial match: ${user.name} (${user.email})`);
+                return user.id;
+            }
+        }
+        
+        console.log(`[Assignment] ✗ No user found matching "${assigneeName}"`);
+        return null;
+    } catch (error) {
+        console.error(`[Assignment] Error finding user by name "${assigneeName}":`, error);
+        return null;
+    }
+}
+
+/**
+ * Get organization members for task assignment
+ */
+async function getOrganizationMembers(): Promise<Array<{name: string, email: string}>> {
+    try {
+        const members = await User.find({ role: 'member' })
+            .select('name email')
+            .sort({ name: 1 });
+        
+        return members.map(m => ({ name: m.name, email: m.email }));
+    } catch (error) {
+        console.error('[Assignment] Error fetching organization members:', error);
+        return [];
+    }
+}
 
 /**
  * Scan emails for new messages and extract tasks
@@ -89,6 +156,12 @@ export const processSpecificEmail = async (req: Request, res: Response): Promise
             return;
         }
 
+        // Get organization members if user is an organization account
+        let organizationMembers: Array<{name: string, email: string}> = [];
+        if (user.role === 'organisation') {
+            organizationMembers = await getOrganizationMembers();
+        }
+
         // Fetch the specific email
         const email = await fetchEmailById(grantId, messageId);
 
@@ -102,7 +175,8 @@ export const processSpecificEmail = async (req: Request, res: Response): Promise
         const extractedTask = await extractTaskFromEmail(
             email.subject,
             emailBody,
-            emailFrom
+            emailFrom,
+            user.role === 'organisation' ? organizationMembers : undefined
         );
 
         if (!extractedTask.hasTask || (extractedTask.confidence || 0) < 0.5) {
@@ -113,13 +187,19 @@ export const processSpecificEmail = async (req: Request, res: Response): Promise
             return;
         }
 
+        // Find the user ID if a name was extracted
+        let assignedToId: string | null = null;
+        if (extractedTask.assignedToName && user.role === 'organisation') {
+            assignedToId = await findUserByName(extractedTask.assignedToName);
+        }
+
         // Create the task
         const newTask = new Task({
             title: extractedTask.title,
             description: extractedTask.description,
             priority: extractedTask.priority || 'medium',
             dueDate: extractedTask.dueDate ? new Date(extractedTask.dueDate) : null,
-            assignedTo: null,
+            assignedTo: assignedToId,
             isPrivate: user.role === 'member',
             createdBy: user.id,
             status: 'pending'
@@ -138,7 +218,10 @@ export const processSpecificEmail = async (req: Request, res: Response): Promise
         res.status(201).json({
             message: 'Task created successfully from email',
             task: savedTask,
-            extractedData: extractedTask
+            extractedData: {
+                ...extractedTask,
+                assignedToUserId: assignedToId
+            }
         });
     } catch (error: any) {
         console.error('Error processing specific email:', error);
