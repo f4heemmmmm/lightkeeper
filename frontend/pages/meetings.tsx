@@ -365,6 +365,12 @@ export default function MeetingsPage() {
                 <div className="max-w-7xl mx-auto px-8">
                     <div className="flex gap-6">
                         <button
+                            onClick={() => router.push("/analytics")}
+                            className="py-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            Analytics
+                        </button>
+                        <button
                             onClick={() => router.push("/")}
                             className="py-4 text-gray-400 hover:text-white transition-colors"
                         >

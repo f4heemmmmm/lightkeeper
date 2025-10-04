@@ -415,6 +415,12 @@ export default function OrganisationHomepage({
             <div className="border-b border-white/10">
                 <div className="max-w-7xl mx-auto px-3">
                     <div className="flex gap-6">
+                        <button
+                            onClick={() => (window.location.href = "/analytics")}
+                            className="py-4 text-gray-400 hover:text-white transition-colors"
+                        >
+                            Analytics
+                        </button>
                         <button className="py-4 text-white border-b-2 border-white">
                             Tasks
                         </button>
