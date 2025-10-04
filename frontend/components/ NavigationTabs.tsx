@@ -15,7 +15,7 @@ export default function NavigationTabs({ currentPage }: NavigationTabsProps) {
 
     return (
         <div className="border-b border-white/10">
-            <div className="max-w-7xl mx-auto px-8">
+            <div className="max-w-10xl mx-auto px-20">
                 <div className="flex gap-6">
                     <button
                         onClick={() => navigateToPage("/")}
