@@ -4,6 +4,20 @@ import { Request, Response } from 'express';
 import { analyzeMeetingNotes } from '../services/openaiService';
 
 /**
+ * Decode base64 content with proper UTF-8 handling
+ */
+const decodeFileContent = (fileContent: string): string => {
+    try {
+        const base64Content = fileContent.replace(/^data:text\/plain;base64,/, '');
+        const buffer = Buffer.from(base64Content, 'base64');
+        return buffer.toString('utf-8');
+    } catch (error) {
+        console.error('Error decoding file content:', error);
+        return fileContent;
+    }
+};
+
+/**
  * Get all meetings sorted by creation date
  */
 export const getAllMeetings = async (req: Request, res: Response): Promise<void> => {
@@ -49,9 +63,11 @@ export const createMeeting = async (req: Request, res: Response): Promise<void> 
             return;
         }
 
+        const decodedContent = decodeFileContent(fileContent);
         let analysis;
+        
         try {
-            analysis = await analyzeMeetingNotes(fileContent);
+            analysis = await analyzeMeetingNotes(decodedContent);
         } catch (error) {
             console.error('Error analyzing meeting notes:', error);
             res.status(500).json({ message: 'Failed to analyze meeting notes with AI' });

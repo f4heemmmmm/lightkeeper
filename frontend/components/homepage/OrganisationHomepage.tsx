@@ -113,18 +113,25 @@ export default function OrganisationHomepage({
     const createTask = async (): Promise<void> => {
         if (
             !newTask.title.trim() ||
-            !newTask.description.trim() ||
-            !newTask.dueDate ||
-            !newTask.dueTime
+            !newTask.description.trim()
         ) {
-            setError("All fields are required");
+            setError("Title and description are required");
+            return;
+        }
+
+        // If date is provided, time must also be provided
+        if (newTask.dueDate && !newTask.dueTime) {
+            setError("Time is required when date is set");
             return;
         }
 
         try {
-            const dueDateTimeISO = new Date(
-                `${newTask.dueDate}T${newTask.dueTime}`
-            ).toISOString();
+            let dueDateTimeISO = null;
+            if (newTask.dueDate && newTask.dueTime) {
+                dueDateTimeISO = new Date(
+                    `${newTask.dueDate}T${newTask.dueTime}`
+                ).toISOString();
+            }
 
             const response = await axios.post<Task>(
                 `${API_URL}/api/tasks`,

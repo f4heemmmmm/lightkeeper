@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import axios, { AxiosError } from "axios";
 import { useState, useEffect } from "react";
@@ -37,6 +38,31 @@ interface ErrorResponse {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+/**
+ * Decode base64 content with proper UTF-8 handling
+ * This fixes encoding issues like "â€™" appearing instead of "'"
+ */
+const decodeBase64Content = (base64String: string): string => {
+    try {
+        const binaryString = atob(base64String);
+
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const decoder = new TextDecoder("utf-8");
+        return decoder.decode(bytes);
+    } catch (error) {
+        console.error("Error decoding base64 content:", error);
+        try {
+            return atob(base64String);
+        } catch {
+            return "Error decoding content";
+        }
+    }
+};
 
 export default function MeetingsPage() {
     const router = useRouter();
@@ -107,7 +133,6 @@ export default function MeetingsPage() {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
 
-            // Validate file type
             if (!file.name.endsWith(".txt")) {
                 setError("Only .txt files are allowed");
                 return;
@@ -129,7 +154,7 @@ export default function MeetingsPage() {
                 }
             };
             reader.onerror = () => reject(new Error("Failed to read file"));
-            reader.readAsText(file);
+            reader.readAsText(file, "utf-8");
         });
     };
 
@@ -141,10 +166,7 @@ export default function MeetingsPage() {
 
         setIsUploading(true);
         try {
-            // Read the file content
             const content = await readFileContent(selectedFile);
-
-            // Store content as base64 in the fileUrl
             const base64Content = btoa(unescape(encodeURIComponent(content)));
             const dataUrl = `data:text/plain;base64,${base64Content}`;
 
@@ -154,7 +176,7 @@ export default function MeetingsPage() {
                     fileUrl: dataUrl,
                     fileName: selectedFile.name,
                     fileSize: selectedFile.size,
-                    fileContent: content, // Send plain text content for AI analysis
+                    fileContent: content,
                 },
                 {
                     headers: getAuthHeader(),
@@ -179,49 +201,27 @@ export default function MeetingsPage() {
     const loadFileContent = async (meeting: Meeting): Promise<void> => {
         setIsLoadingContent(true);
         try {
-            console.log("=== DEBUG MEETING OBJECT ===");
-            console.log("Full meeting object:", meeting);
-            console.log("Meeting fileUrl:", meeting.fileUrl);
-            console.log("Meeting fileUrl type:", typeof meeting.fileUrl);
-            console.log("Meeting fileUrl length:", meeting.fileUrl?.length);
-
             if (!meeting.fileUrl) {
-                console.error(
-                    "No file URL found - meeting.fileUrl is:",
-                    meeting.fileUrl
-                );
                 setFileContent("No transcript available");
                 return;
             }
 
-            // Handle data URL format
             if (meeting.fileUrl.startsWith("data:text/plain;base64,")) {
                 const base64Content = meeting.fileUrl.split(",")[1];
-                console.log("Base64 content length:", base64Content?.length);
 
                 if (!base64Content) {
-                    console.error("No base64 content found after comma");
                     setFileContent("Invalid transcript format");
                     return;
                 }
 
                 try {
-                    // Decode base64 content
-                    const decodedContent = atob(base64Content);
-                    console.log(
-                        "Decoded content length:",
-                        decodedContent.length
-                    );
+                    const decodedContent = decodeBase64Content(base64Content);
                     setFileContent(decodedContent);
                 } catch (decodeError) {
                     console.error("Base64 decode error:", decodeError);
                     setFileContent("Failed to decode transcript");
                 }
             } else {
-                console.log(
-                    "File URL format not recognized:",
-                    meeting.fileUrl.substring(0, 50)
-                );
                 setFileContent("Unsupported transcript format");
             }
         } catch (err) {
@@ -236,6 +236,11 @@ export default function MeetingsPage() {
         setSelectedMeeting(meeting);
         setShowDetailModal(true);
         await loadFileContent(meeting);
+    };
+
+    const handleCloseModal = (): void => {
+        setShowDetailModal(false);
+        setFileContent("");
     };
 
     const deleteMeeting = async (id: string): Promise<void> => {
@@ -349,7 +354,6 @@ export default function MeetingsPage() {
                 </div>
             </div>
 
-            {/* Navigation */}
             <div className="border-b border-white/10">
                 <div className="max-w-7xl mx-auto px-8">
                     <div className="flex gap-6">
@@ -372,7 +376,6 @@ export default function MeetingsPage() {
                 </div>
             </div>
 
-            {/* Error Message */}
             {error && (
                 <div className="max-w-7xl mx-auto px-8 pt-4">
                     <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg flex justify-between items-center">
@@ -421,7 +424,6 @@ export default function MeetingsPage() {
                 </div>
             </div>
 
-            {/* Meetings List */}
             <div className="max-w-7xl mx-auto px-8 pb-8">
                 <div className="bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                     <div className="px-6 py-4 border-b border-white/10">
@@ -601,152 +603,14 @@ export default function MeetingsPage() {
                 </div>
             )}
 
-            {/* Detail Modal */}
             {showDetailModal && selectedMeeting && (
-                <>
-                    <div
-                        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40"
-                        onClick={() => {
-                            setShowDetailModal(false);
-                            setFileContent("");
-                        }}
-                    />
-                    <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-                        <div className="bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
-                            <div className="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
-                                <h2 className="text-2xl font-semibold">
-                                    {selectedMeeting.title}
-                                </h2>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() =>
-                                            deleteMeeting(selectedMeeting._id)
-                                        }
-                                        className="text-gray-400 hover:text-red-400 transition-colors p-2 rounded-md hover:bg-white/10"
-                                        title="Delete meeting"
-                                    >
-                                        <Trash2 className="w-5 h-5" />
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setShowDetailModal(false);
-                                            setFileContent("");
-                                        }}
-                                        className="p-2 rounded-md hover:bg-white/10 transition-colors"
-                                    >
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="px-8 py-6 space-y-6 overflow-y-auto flex-1">
-                                {selectedMeeting.description && (
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                                            Description
-                                        </h3>
-                                        <p className="text-gray-300 text-base leading-relaxed">
-                                            {selectedMeeting.description}
-                                        </p>
-                                    </div>
-                                )}
-                                {selectedMeeting.summary && (
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                                            AI-Generated Summary
-                                        </h3>
-                                        <p className="text-gray-300 text-base leading-relaxed">
-                                            {selectedMeeting.summary}
-                                        </p>
-                                    </div>
-                                )}
-                                {selectedMeeting.actionItems &&
-                                    selectedMeeting.actionItems.length > 0 && (
-                                        <div>
-                                            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                                                Action Items
-                                            </h3>
-                                            <ul className="space-y-2">
-                                                {selectedMeeting.actionItems.map(
-                                                    (item, index) => (
-                                                        <li
-                                                            key={index}
-                                                            className="flex items-start gap-2"
-                                                        >
-                                                            <span className="text-blue-400 mt-1.5">
-                                                                •
-                                                            </span>
-                                                            <span className="text-gray-300 text-sm">
-                                                                {item}
-                                                            </span>
-                                                        </li>
-                                                    )
-                                                )}
-                                            </ul>
-                                        </div>
-                                    )}
-                                <div>
-                                    <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                                        File Information
-                                    </h3>
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">
-                                                File Name:
-                                            </span>
-                                            <span className="text-white">
-                                                {selectedMeeting.fileName}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">
-                                                File Size:
-                                            </span>
-                                            <span className="text-white">
-                                                {formatFileSize(
-                                                    selectedMeeting.fileSize
-                                                )}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">
-                                                Uploaded By:
-                                            </span>
-                                            <span className="text-white">
-                                                {selectedMeeting.uploaderName}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-400">
-                                                Uploaded At:
-                                            </span>
-                                            <span className="text-white">
-                                                {formatDateTime(
-                                                    selectedMeeting.createdAt
-                                                )}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                                        Full Transcript
-                                    </h3>
-                                    {isLoadingContent ? (
-                                        <div className="text-center py-8 text-gray-400">
-                                            Loading content...
-                                        </div>
-                                    ) : (
-                                        <div className="bg-white/5 border border-white/10 rounded-lg p-4 max-h-[400px] overflow-y-auto">
-                                            <pre className="text-gray-300 text-sm whitespace-pre-wrap font-mono">
-                                                {fileContent}
-                                            </pre>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </>
+                <MeetingDetailModal
+                    meeting={selectedMeeting}
+                    fileContent={fileContent}
+                    isLoadingContent={isLoadingContent}
+                    onClose={handleCloseModal}
+                    onDelete={deleteMeeting}
+                />
             )}
         </div>
     );
