@@ -33,6 +33,11 @@ interface Task {
     createdAt: string;
     assignedTo?: AssignedUser | null;
     isPrivate?: boolean;
+    sourceMeeting?: {
+        _id: string;
+        title: string;
+        createdAt: string;
+    } | null;
 }
 
 interface Comment {
@@ -60,6 +65,7 @@ interface TaskDetailModalProps {
     onUnassign?: (taskId: string) => void;
     onAssign?: (taskId: string, memberId: string) => void;
     onRestoreTask?: (taskId: string) => void;
+    onViewMeeting?: (meetingId: string) => void;
 }
 
 export default function TaskDetailModal({
@@ -75,6 +81,7 @@ export default function TaskDetailModal({
     onUnassign,
     onAssign,
     onRestoreTask,
+    onViewMeeting,
 }: TaskDetailModalProps) {
     const [selectedMemberId, setSelectedMemberId] = useState<string>("");
     const [comments, setComments] = useState<Comment[]>([]);
@@ -581,6 +588,39 @@ export default function TaskDetailModal({
                                     </p>
                                 )}
                             </div>
+
+                            {/* Meeting Context Section */}
+                            {task.sourceMeeting && (
+                                <div className="mb-8">
+                                    <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                                        Source Meeting
+                                    </h3>
+                                    <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-white font-medium">
+                                                    {task.sourceMeeting.title}
+                                                </p>
+                                                <p className="text-gray-400 text-sm mt-1">
+                                                    Created from meeting action item
+                                                </p>
+                                            </div>
+                                            {onViewMeeting && (
+                                                <button
+                                                    onClick={() => onViewMeeting(task.sourceMeeting!._id)}
+                                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                    View Meeting
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Comments Section */}
                             <div>

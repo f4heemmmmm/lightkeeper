@@ -140,7 +140,7 @@ export default function MeetingChatbot({
     return (
         <div className="w-1/3 border-l border-white/10 flex flex-col">
             <div className="px-6 py-4 border-b border-white/10">
-                <h3 className="text-lg font-semibold">SmartMeeting</h3>
+                <h3 className="text-lg font-semibold text-white">SmartMeeting</h3>
                 <p className="text-xs text-gray-400 mt-1">
                     Ask questions about this meeting
                 </p>

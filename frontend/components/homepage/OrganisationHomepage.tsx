@@ -42,6 +42,11 @@ interface Task {
     dueDate: string;
     createdAt: string;
     assignedTo?: AssignedUser | null;
+    sourceMeeting?: {
+        _id: string;
+        title: string;
+        createdAt: string;
+    } | null;
 }
 
 interface NewTask {
@@ -69,6 +74,7 @@ interface OrganisationHomepageProps {
     getAuthHeader: () => Record<string, string>;
     handleLogout: () => void;
     API_URL: string;
+    onViewMeeting?: (meetingId: string) => void;
 }
 
 export default function OrganisationHomepage({
@@ -84,6 +90,7 @@ export default function OrganisationHomepage({
     getAuthHeader,
     handleLogout,
     API_URL,
+    onViewMeeting,
 }: OrganisationHomepageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
@@ -395,7 +402,7 @@ export default function OrganisationHomepage({
                         </div>
                         <button
                             onClick={handleLogout}
-                            className="p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                            className="p-3 rounded-lg bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 hover:scale-105 transition-all duration-200 shadow-lg"
                             title="Logout"
                         >
                             <LogOut className="w-5 h-5" />
@@ -446,7 +453,7 @@ export default function OrganisationHomepage({
 
             {/* Priority Filters */}
             <div className="max-w-7xl mx-auto px-8 pt-6">
-                <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-4 shadow-lg hover:bg-white/10 transition-all duration-300">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="flex items-center gap-2">
@@ -472,30 +479,30 @@ export default function OrganisationHomepage({
                                 {
                                     value: "all",
                                     label: "All",
-                                    color: "bg-gray-500/20 text-gray-400 border-gray-500/30 hover:bg-gray-500/30",
+                                    color: "bg-gray-500/20 text-gray-400 border-gray-500/30 hover:bg-gray-500/30 hover:scale-105",
                                     activeColor:
-                                        "bg-gray-500/30 text-gray-300 border-gray-500/50",
+                                        "bg-gray-500/30 text-gray-300 border-gray-500/50 scale-105",
                                 },
                                 {
                                     value: "high",
                                     label: "High",
-                                    color: "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30",
+                                    color: "bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30 hover:scale-105",
                                     activeColor:
-                                        "bg-red-500/30 text-red-300 border-red-500/50",
+                                        "bg-red-500/30 text-red-300 border-red-500/50 scale-105",
                                 },
                                 {
                                     value: "medium",
                                     label: "Medium",
-                                    color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30",
+                                    color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30 hover:scale-105",
                                     activeColor:
-                                        "bg-yellow-500/30 text-yellow-300 border-yellow-500/50",
+                                        "bg-yellow-500/30 text-yellow-300 border-yellow-500/50 scale-105",
                                 },
                                 {
                                     value: "low",
                                     label: "Low",
-                                    color: "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30",
+                                    color: "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30 hover:scale-105",
                                     activeColor:
-                                        "bg-green-500/30 text-green-300 border-green-500/50",
+                                        "bg-green-500/30 text-green-300 border-green-500/50 scale-105",
                                 },
                             ].map((filter) => (
                                 <button
@@ -503,7 +510,7 @@ export default function OrganisationHomepage({
                                     onClick={() =>
                                         setPriorityFilter(filter.value)
                                     }
-                                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-200 ${
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-200 backdrop-blur-sm shadow-lg ${
                                         priorityFilter === filter.value
                                             ? filter.activeColor
                                             : filter.color
@@ -516,7 +523,7 @@ export default function OrganisationHomepage({
                             {priorityFilter !== "all" && (
                                 <button
                                     onClick={() => setPriorityFilter("all")}
-                                    className="ml-2 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all duration-200"
+                                    className="ml-2 p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 hover:scale-110 transition-all duration-200 backdrop-blur-sm shadow-lg"
                                     title="Clear filter"
                                 >
                                     <X className="w-4 h-4" />
@@ -553,25 +560,25 @@ export default function OrganisationHomepage({
             {/* Stats */}
             <div className="max-w-7xl mx-auto px-8 py-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-                        <p className="text-gray-400 text-md mb-1 font-semibold">
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-lg hover:bg-white/10 hover:scale-105 transition-all duration-300 group">
+                        <p className="text-gray-400 text-md mb-1 font-semibold group-hover:text-gray-300 transition-colors">
                             Total Tasks
                         </p>
-                        <p className="text-4xl font-thin">{tasks.length}</p>
+                        <p className="text-4xl font-thin group-hover:text-white transition-colors">{tasks.length}</p>
                     </div>
-                    <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-                        <p className="text-gray-400 text-md mb-1 font-semibold">
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-lg hover:bg-white/10 hover:scale-105 transition-all duration-300 group">
+                        <p className="text-gray-400 text-md mb-1 font-semibold group-hover:text-gray-300 transition-colors">
                             Completed
                         </p>
-                        <p className="text-4xl font-thin">
+                        <p className="text-4xl font-thin group-hover:text-white transition-colors">
                             {completedTasks.length}
                         </p>
                     </div>
-                    <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-                        <p className="text-gray-400 text-md mb-1 font-semibold">
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-6 shadow-lg hover:bg-white/10 hover:scale-105 transition-all duration-300 group">
+                        <p className="text-gray-400 text-md mb-1 font-semibold group-hover:text-gray-300 transition-colors">
                             Pending
                         </p>
-                        <p className="text-4xl font-thin">{allTasks.length}</p>
+                        <p className="text-4xl font-thin group-hover:text-white transition-colors">{allTasks.length}</p>
                     </div>
                 </div>
             </div>
@@ -581,10 +588,10 @@ export default function OrganisationHomepage({
                 <div className="flex gap-6 h-[calc(100vh-500px)] min-h-[400px]">
                     {/* Left Column - All Tasks */}
                     <div
-                        className={`w-1/2 bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col transition-colors ${
+                        className={`w-1/2 bg-white/5 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden flex flex-col shadow-lg transition-all duration-300 ${
                             dragOverZone === "pending"
-                                ? "border-blue-400 bg-blue-500/10"
-                                : ""
+                                ? "border-blue-400 bg-blue-500/10 scale-105"
+                                : "hover:bg-white/10 hover:scale-[1.02]"
                         }`}
                         onDragOver={(e) => handleDragOver(e, "pending")}
                         onDragLeave={handleDragLeave}
@@ -611,7 +618,7 @@ export default function OrganisationHomepage({
                                     {allTasks.map((task) => (
                                         <div
                                             key={task._id}
-                                            className={`p-4 cursor-pointer hover:bg-white/5 transition-colors ${
+                                            className={`p-4 cursor-pointer hover:bg-white/10 transition-all duration-200 rounded-lg mx-2 my-1 group ${
                                                 draggedTask?._id === task._id
                                                     ? "opacity-50"
                                                     : ""
@@ -691,10 +698,10 @@ export default function OrganisationHomepage({
 
                     {/* Right Column - Completed Tasks */}
                     <div
-                        className={`w-1/2 bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col transition-colors ${
+                        className={`w-1/2 bg-white/5 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden flex flex-col shadow-lg transition-all duration-300 ${
                             dragOverZone === "completed"
-                                ? "border-green-400 bg-green-500/10"
-                                : ""
+                                ? "border-green-400 bg-green-500/10 scale-105"
+                                : "hover:bg-white/10 hover:scale-[1.02]"
                         }`}
                         onDragOver={(e) => handleDragOver(e, "completed")}
                         onDragLeave={handleDragLeave}
@@ -715,7 +722,7 @@ export default function OrganisationHomepage({
                                     {completedTasks.map((task) => (
                                         <div
                                             key={task._id}
-                                            className={`p-4 cursor-pointer hover:bg-white/5 transition-colors ${
+                                            className={`p-4 cursor-pointer hover:bg-white/10 transition-all duration-200 rounded-lg mx-2 my-1 group ${
                                                 draggedTask?._id === task._id
                                                     ? "opacity-50"
                                                     : ""
@@ -787,7 +794,7 @@ export default function OrganisationHomepage({
             <div className="fixed bottom-8 right-8 flex flex-col gap-3">
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    className="bg-white text-black p-4 rounded-full shadow-lg hover:bg-gray-100 transition-colors flex items-center justify-center group"
+                    className="bg-white/90 backdrop-blur-md text-black p-4 rounded-full shadow-xl hover:bg-white hover:scale-110 transition-all duration-300 flex items-center justify-center group border border-white/20"
                     title="Create new task"
                 >
                     <Plus className="w-6 h-6" />
@@ -811,6 +818,7 @@ export default function OrganisationHomepage({
                 onUnassign={unassignTask}
                 onAssign={assignTaskToMember}
                 onRestoreTask={restoreTask}
+                onViewMeeting={onViewMeeting}
             />
 
             {/* Create Task Modal */}
