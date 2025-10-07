@@ -83,7 +83,7 @@ export default function MeetingDetailModal({
                                 meetingTitle={meeting.title}
                             />
                         </div>
-                        
+
                         {/* Similar Meetings Carousel - Bottom */}
                         {allMeetings && onMeetingSelect && (
                             <MeetingSimilarCarousel

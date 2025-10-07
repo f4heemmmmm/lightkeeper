@@ -369,7 +369,7 @@ export default function NotetakerPage() {
                 </div>
             </div>
 
-            <div className="fixed bottom-8 right-8">
+            <div className="fixed bottom-10 right-14">
                 <button
                     onClick={() => setShowScheduleModal(true)}
                     className="bg-white text-black p-4 rounded-full shadow-lg hover:bg-gray-100 transition-colors flex items-center justify-center group"

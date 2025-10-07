@@ -376,14 +376,17 @@ export default function MemberHomepage({
                                                     {task.title}
                                                 </h3>
                                                 <div className="flex flex-wrap gap-3 text-xs">
-                                                    {task.dueDate && formatDateTime(task.dueDate) && (
-                                                        <span className="text-gray-400">
-                                                            Due:{" "}
-                                                            {formatDateTime(
-                                                                task.dueDate
-                                                            )}
-                                                        </span>
-                                                    )}
+                                                    {task.dueDate &&
+                                                        formatDateTime(
+                                                            task.dueDate
+                                                        ) && (
+                                                            <span className="text-gray-400">
+                                                                Due:{" "}
+                                                                {formatDateTime(
+                                                                    task.dueDate
+                                                                )}
+                                                            </span>
+                                                        )}
                                                     <span
                                                         className={getPriorityColor(
                                                             task.priority
@@ -418,7 +421,7 @@ export default function MemberHomepage({
             </div>
 
             {/* Floating Action Button */}
-            <div className="fixed bottom-8 right-8 flex flex-col gap-3">
+            <div className="fixed bottom-10 right-14 flex flex-col gap-3">
                 <button
                     onClick={() => setShowCreateTaskModal(true)}
                     className="bg-white text-black p-4 rounded-full shadow-lg hover:bg-gray-100 transition-colors flex items-center justify-center group"
@@ -520,14 +523,17 @@ export default function MemberHomepage({
                                                     >
                                                         {task.priority.toUpperCase()}
                                                     </span>
-                                                    {task.dueDate && formatDateTime(task.dueDate) && (
-                                                        <span className="text-gray-500">
-                                                            Due:{" "}
-                                                            {formatDateTime(
-                                                                task.dueDate
-                                                            )}
-                                                        </span>
-                                                    )}
+                                                    {task.dueDate &&
+                                                        formatDateTime(
+                                                            task.dueDate
+                                                        ) && (
+                                                            <span className="text-gray-500">
+                                                                Due:{" "}
+                                                                {formatDateTime(
+                                                                    task.dueDate
+                                                                )}
+                                                            </span>
+                                                        )}
                                                 </div>
                                             </div>
                                         </div>

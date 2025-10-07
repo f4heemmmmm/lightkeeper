@@ -1,5 +1,5 @@
 import express from 'express';
-import { syncCalendar, getSyncStats, getCalendarEvents, getCalendars } from '../controllers/calendarController';
+import { syncCalendar, getSyncStats, getCalendarEvents, getCalendars, syncTasksToCalendar } from '../controllers/calendarController';
 import { protect } from '../middleware/auth';
 
 const router = express.Router();
@@ -15,6 +15,9 @@ router.get('/events', protect, getCalendarEvents);
 
 // Get all calendars
 router.get('/calendars', protect, getCalendars);
+
+// Sync tasks to Google Calendar
+router.post('/sync-to-calendar', protect, syncTasksToCalendar);
 
 export default router;
 

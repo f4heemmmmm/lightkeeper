@@ -10,6 +10,7 @@ export interface IMeeting extends Document {
     fileUrl: string;
     fileName: string;
     fileSize: number;
+    fileHash: string;
     uploadedBy: mongoose.Types.ObjectId;
     uploaderName: string;
     createdAt: Date;
@@ -56,6 +57,11 @@ const meetingSchema = new Schema<IMeeting>(
         fileSize: {
             type: Number,
             required: [true, 'File size is required']
+        },
+        fileHash: {
+            type: String,
+            required: [true, 'File hash is required'],
+            index: true
         },
         uploadedBy: {
             type: Schema.Types.ObjectId,

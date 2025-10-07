@@ -375,3 +375,44 @@ export const fetchCalendars = async (grantId: string): Promise<any[]> => {
         throw new Error(`Failed to fetch calendars: ${error.response?.data?.message || error.message}`);
     }
 };
+
+/**
+ * Create a calendar event in Google Calendar
+ */
+export const createCalendarEvent = async (
+    grantId: string,
+    calendarId: string,
+    eventData: {
+        title: string;
+        description?: string;
+        startTime: Date;
+        endTime?: Date;
+        location?: string;
+    }
+): Promise<any> => {
+    try {
+        const response = await axios.post(
+            `${NYLAS_API_URL}/v3/grants/${grantId}/events`,
+            {
+                title: eventData.title,
+                description: eventData.description,
+                when: {
+                    start_time: Math.floor(eventData.startTime.getTime() / 1000),
+                    end_time: Math.floor((eventData.endTime || new Date(eventData.startTime.getTime() + 60 * 60 * 1000)).getTime() / 1000),
+                    object: 'timespan'
+                },
+                location: eventData.location,
+                calendar_id: calendarId
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${NYLAS_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        return response.data.data;
+    } catch (error: any) {
+        throw new Error(`Failed to create calendar event: ${error.response?.data?.message || error.message}`);
+    }
+};

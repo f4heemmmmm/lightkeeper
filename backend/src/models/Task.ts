@@ -9,7 +9,8 @@ export interface ITask extends Document {
     assignedTo?: mongoose.Types.ObjectId | null;
     isPrivate: boolean;
     createdBy: mongoose.Types.ObjectId;
-    source?: 'manual' | 'email' | 'calendar';
+    source?: 'manual' | 'email' | 'calendar' | 'meeting';
+    sourceMeetingId?: mongoose.Types.ObjectId | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -59,13 +60,31 @@ const taskSchema = new Schema<ITask>(
         },
         source: {
             type: String,
-            enum: ['manual', 'email', 'calendar'],
+            enum: ['manual', 'email', 'calendar', 'meeting'],
             default: 'manual'
+        },
+        sourceMeetingId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Meeting',
+            default: null
         }
     },
     {
         timestamps: true
     }
 );
+
+// Add post-save middleware to sync new tasks to calendar
+taskSchema.post('save', async function(doc) {
+    if (this.isNew && doc.dueDate && doc.source !== 'calendar') {
+        // Sync this task to Google Calendar
+        try {
+            const { syncTaskToCalendar } = require('../services/calendarSchedulerService');
+            await syncTaskToCalendar(doc);
+        } catch (error) {
+            console.error('Failed to sync task to calendar:', error);
+        }
+    }
+});
 
 export default mongoose.model<ITask>('Task', taskSchema);

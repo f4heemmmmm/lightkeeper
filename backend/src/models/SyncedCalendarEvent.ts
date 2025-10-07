@@ -9,6 +9,7 @@ export interface ISyncedCalendarEvent extends Document {
     eventTitle: string;
     eventStartTime: Date;
     eventEndTime?: Date;
+    syncDirection: 'calendar_to_task' | 'task_to_calendar';
     createdAt: Date;
     updatedAt: Date;
 }
@@ -23,6 +24,11 @@ const syncedCalendarEventSchema = new Schema<ISyncedCalendarEvent>(
         eventTitle: { type: String, required: true },
         eventStartTime: { type: Date, required: true },
         eventEndTime: { type: Date, required: false },
+        syncDirection: { 
+            type: String, 
+            enum: ['calendar_to_task', 'task_to_calendar'],
+            default: 'calendar_to_task'
+        },
     },
     {
         timestamps: true

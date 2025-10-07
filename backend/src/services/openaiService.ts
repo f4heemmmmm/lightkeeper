@@ -40,32 +40,106 @@ export const analyzeMeetingNotes = async (
 **ONLY extract action items for these organization members:**
 ${memberList}
 
-**FILTERING RULES:**
-1. **Speaker Identification**: Carefully identify who is being assigned each task in the transcript
-2. **Name Matching**: Match speaker names/identifiers to the organization members list above
-   - Look for first names, last names, full names, or email addresses
-   - Be flexible with variations (e.g., "John" matches "John Smith")
-   - Check for informal names or nicknames that might refer to organization members
-3. **EXCLUDE external participants**: If a task is assigned to someone NOT in the organization member list, DO NOT include it as an action item
-4. **Unknown assignments**: If you cannot determine who a task is for, or if it's clearly for someone outside the organization, EXCLUDE it
-5. **Group tasks**: If a task says "we" or "the team", only include it if it's clear organization members are involved
-6. **Verification**: Before including each action item, verify the assignee is in the organization member list
+**FILTERING RULES - APPLY STRICTLY:**
 
-**Example Decision Process:**
-- Transcript says: "Sarah will send the proposal to the client"
-- Check: Is "Sarah" in the organization member list?
-- YES → Include: "Sarah will send the proposal to the client"
-- NO → EXCLUDE this action item
+1. **Speaker Identification Protocol:**
+   - Scan EVERY action item for WHO is assigned the task
+   - Look for patterns: "X will...", "X should...", "X needs to...", "X, please...", "Can X...", "Have X..."
+   - If no assignee is mentioned, mark as "TBD" but still include (internal task)
 
-- Transcript says: "John from Acme Corp will review the contract"  
-- Check: Is "John" in the organization member list?
-- NO (external vendor) → EXCLUDE this action item
+2. **Name Matching Algorithm:**
+   - **Exact matches**: Full names, first names, last names
+   - **Partial matches**: "John" matches "John Smith", "Smith" matches "John Smith"
+   - **Email matches**: Any part of email address (e.g., "john" matches "john.smith@company.com")
+   - **Case insensitive**: "SARAH" matches "Sarah", "sarah" matches "Sarah"
+   - **Common variations**: Handle nicknames (Mike/Michael, Bob/Robert, etc.)
+   - **Whitespace flexible**: "John Smith" matches "John  Smith" or "JohnSmith"
 
-**FORMAT for organization action items:**
-When an organization member has an action item, format as:
-"[Member Name] will [action] by [deadline]"
+3. **EXCLUSION CRITERIA - MANDATORY:**
+   ❌ **External companies mentioned**: "John from Acme Corp", "Sarah at ClientCo", "the team at VendorX"
+   ❌ **Client/customer references**: "client will review", "customer needs to approve"
+   ❌ **Vendor/supplier tasks**: "supplier will deliver", "contractor will install"
+   ❌ **Third-party services**: "bank will process", "lawyer will draft", "accountant will file"
+   ❌ **Unknown external people**: Names that don't match ANY organization member
+   ❌ **Generic external roles**: "their team", "external consultant", "the vendor"
 
-This ensures you only track tasks for YOUR team members, not external participants.` : '';
+4. **INCLUSION CRITERIA - REQUIRED:**
+   ✅ **Exact name match**: Person's name appears in organization member list
+   ✅ **Internal team references**: "we will", "our team will", "the team will" (when context is internal)
+   ✅ **Unassigned internal tasks**: Clear internal tasks without specific assignee
+   ✅ **Role-based internal assignments**: "project manager will" (if PM is in member list)
+
+5. **DECISION TREE - Follow This Exactly:**
+   \`\`\`
+   For each potential action item:
+   
+   Step 1: Extract the assignee name/identifier
+   Step 2: Is assignee mentioned?
+     → NO: Is this clearly an internal task? 
+       → YES: Include with assignedTo: null
+       → NO: EXCLUDE
+     → YES: Continue to Step 3
+   
+   Step 3: Does assignee match ANY organization member?
+     → Use fuzzy matching rules above
+     → YES: Include with matched member name
+     → NO: Continue to Step 4
+   
+   Step 4: Is there external context (company name, "client", "vendor")?
+     → YES: EXCLUDE (external participant)
+     → NO: Continue to Step 5
+   
+   Step 5: Is assignee clearly external based on context?
+     → YES: EXCLUDE
+     → NO: Include with assignedTo: null (unknown internal)
+   \`\`\`
+
+6. **VERIFICATION CHECKLIST - Run Before Including Each Item:**
+   □ Is the assignee name in the organization member list? (exact or fuzzy match)
+   □ If not in list, is there ANY indication this is external? (company, client, vendor context)
+   □ If external indicators present → EXCLUDE
+   □ If no external indicators and unclear assignee → Include as internal task
+   □ Double-check: Would this task be relevant for the organization to track?
+
+**EXAMPLES - LEARN FROM THESE:**
+
+**INCLUDE (✅):**
+- "Sarah will send the proposal by Friday" (Sarah in member list)
+- "John needs to review the contract" (John in member list) 
+- "Mike from our team will handle client calls" (Mike in member list)
+- "We need to update the website" (internal team task)
+- "Someone should book the conference room" (internal task, assignee TBD)
+- "The project manager will coordinate" (if PM role belongs to member)
+
+**EXCLUDE (❌):**
+- "John from Acme Corp will review the contract" (external company)
+- "The client will provide feedback by Tuesday" (external client)
+- "Sarah at VendorCo will deliver the materials" (external vendor)
+- "Their legal team will draft the agreement" (external team)
+- "Bob from the bank will process the loan" (external service provider)
+- "The contractor will install the equipment" (external contractor)
+- "Alex will handle it" (Alex NOT in organization member list, no context suggesting internal)
+
+**EDGE CASES:**
+- "John will coordinate with the client" → Include if John is in member list (internal task)
+- "Client will review after John sends it" → Include John's task, exclude client's task
+- "We'll have the vendor update the system" → Include as internal coordination task
+- "Ask the lawyer to review" → Include as internal task to contact lawyer
+
+**FORMAT REQUIREMENTS:**
+- When organization member identified: "[Member Name] will [action] by [deadline]"
+- When internal but unassigned: "[Action] (Owner: TBD)"
+- NEVER include external participant names in the action item text
+- Focus on what the ORGANIZATION needs to do, not what external parties will do
+
+**FINAL VALIDATION:**
+Before outputting action items, ask yourself:
+1. Would the organization's task management system need to track this?
+2. Is this something an organization member needs to do or follow up on?
+3. If assigned to someone, are they definitely in the organization member list?
+4. Have I excluded ALL tasks that are purely external responsibilities?
+
+**CRITICAL OVERRIDE:** When in doubt about whether someone is internal or external, EXCLUDE the item. It's better to miss a potential task than to include external participant tasks.` : '';
 
         const systemPrompt = `### Instruction ###
 You are an AI assistant specialized in analyzing meeting transcripts and notes. 
@@ -528,7 +602,7 @@ ${assignmentInstructions}
   "hasTask": boolean,
   "title": "string, max 100 characters (only if hasTask is true)",
   "description": "string, max 500 characters (only if hasTask is true)",
-  "priority": "low" | "medium" | "high" (only if hasTask is true)",
+  "priority": "low" | "medium" | "high" (only if hasTask is true),
   "dueDate": "ISO date string YYYY-MM-DD if mentioned, null otherwise",
   "confidence": number between 0 and 1,
   "assignedToName": "string - exact name from organization members list, or null"

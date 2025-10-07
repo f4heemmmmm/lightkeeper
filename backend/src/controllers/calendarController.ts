@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { manualSyncForUser } from '../services/calendarSchedulerService';
 import { fetchCalendarEvents, fetchCalendars } from '../services/nylasService';
 import SyncedCalendarEvent from '../models/SyncedCalendarEvent';
+import Task from '../models/Task';
+import { syncTaskToCalendar } from '../services/calendarSchedulerService';
 
 const NYLAS_GRANT_ID = process.env.NYLAS_GRANT_ID;
 
@@ -159,6 +161,44 @@ export const getCalendars = async (req: Request, res: Response): Promise<void> =
             message: 'Failed to fetch calendars', 
             error: error.message 
         });
+    }
+};
+
+/**
+ * Sync all pending tasks to Google Calendar
+ */
+export const syncTasksToCalendar = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user?.id;
+        
+        if (!userId || !NYLAS_GRANT_ID) {
+            res.status(400).json({ message: 'User not authenticated or Nylas not configured' });
+            return;
+        }
+
+        // Get all pending tasks with due dates that aren't already synced
+        const tasks = await Task.find({
+            createdBy: userId,
+            dueDate: { $exists: true, $ne: null },
+            status: 'pending'
+        });
+
+        let syncedCount = 0;
+        for (const task of tasks) {
+            try {
+                await syncTaskToCalendar(task);
+                syncedCount++;
+            } catch (error) {
+                console.error(`Failed to sync task ${task._id}:`, error);
+            }
+        }
+
+        res.status(200).json({
+            message: `Synced ${syncedCount} tasks to Google Calendar`,
+            syncedCount
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Sync failed', error: error.message });
     }
 };
 

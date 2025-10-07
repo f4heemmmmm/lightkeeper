@@ -64,6 +64,7 @@ export const generateAsset = async (req: Request, res: Response): Promise<void> 
             meetingDate,
             assetType: assetType as 'poster' | 'invite' | 'social-media' | 'banner',
             logoBase64: logo?.logoData,
+            logoMimeType: logo?.mimeType,
             organizationName: user.name
         });
 
@@ -212,6 +213,7 @@ export const reviseAsset = async (req: Request, res: Response): Promise<void> =>
             meetingDate,
             assetType: existingAsset.assetType,
             logoBase64: logo?.logoData,
+            logoMimeType: logo?.mimeType,
             organizationName: user.name,
             revisionInstructions
         });

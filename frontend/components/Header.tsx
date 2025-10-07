@@ -18,12 +18,10 @@ export default function Header({ user, pageTitle, onLogout }: HeaderProps) {
         <div className="border-b border-white/10 py-6 px-20">
             <div className="max-w-9xl mx-auto flex justify-between items-center">
                 <div>
-                    <h1 className="text-5xl font-light tracking-tight mb-1">
+                    <h1 className="text-8xl font-light tracking-tight mb-1">
                         Lightkeeper
                     </h1>
-                    <p className="text-sm text-gray-500">
-                        {pageTitle}
-                    </p>
+                    <p className="text-sm text-gray-500">{pageTitle}</p>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="text-right">

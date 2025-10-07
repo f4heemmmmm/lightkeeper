@@ -1,10 +1,53 @@
 import axios from 'axios';
 import Meeting from '../models/Meeting';
+import User from '../models/User';
 import { Request, Response } from 'express';
 import NotetakerSession from '../models/NotetakerSession';
 import { analyzeMeetingNotes } from '../services/openaiService';
 import { createNotetakerSession, getNotetakerSession, downloadTranscript, stopNotetakerSession } from '../services/nylasService';
+import Task from '../models/Task';
+import * as crypto from 'crypto';
+import mongoose from 'mongoose';
 
+/**
+ * Find user ID by name from organization members
+ */
+const findUserByName = async (assigneeName: string): Promise<string | null> => {
+    if (!assigneeName) return null;
+    
+    try {
+        const nameLower = assigneeName.toLowerCase().trim();
+        
+        // Find all members (not organization accounts)
+        const users = await User.find({ role: 'member' });
+        
+        // Try exact name match first
+        let matchedUser = users.find(user => 
+            user.name.toLowerCase() === nameLower
+        );
+        
+        // If no exact match, try partial matching
+        if (!matchedUser) {
+            matchedUser = users.find(user => {
+                const userNameLower = user.name.toLowerCase();
+                const userNameParts = userNameLower.split(' ');
+                const assigneeNameParts = nameLower.split(' ');
+                
+                // Check if any part of the assignee name matches any part of user name
+                return assigneeNameParts.some(assigneePart => 
+                    userNameParts.some(userPart => 
+                        userPart.includes(assigneePart) || assigneePart.includes(userPart)
+                    )
+                );
+            });
+        }
+        
+        return matchedUser ? (matchedUser._id as mongoose.Types.ObjectId).toString() : null;
+    } catch (error) {
+        console.error('Error finding user by name:', error);
+        return null;
+    }
+};
 
 /**
  * Schedule a notetaker bot to join a meeting and record it
@@ -353,6 +396,7 @@ async function processTranscript(sessionId: string, transcriptUrl: string): Prom
             fileUrl: dataUrl,
             fileName: `${session.meetingTitle || 'Meeting Transcript'}.txt`,
             fileSize: transcriptText.length,
+            fileHash: crypto.createHash('sha256').update(transcriptText, 'utf8').digest('hex'),
             uploadedBy: session.scheduledBy,
             uploaderName: session.scheduledByName
         });
@@ -377,6 +421,79 @@ async function processTranscript(sessionId: string, transcriptUrl: string): Prom
         await session.save();
 
         console.log('Successfully processed transcript for session:', sessionId);
+
+        // Automatically create tasks from action items
+        if (analysis.actionItems && analysis.actionItems.length > 0 && savedMeeting) {
+            const tasks = [];
+            
+            for (const actionItem of analysis.actionItems) {
+                const dueDate = new Date();
+                dueDate.setDate(dueDate.getDate() + 7);
+                
+                let assignedToId: string | null = null;
+                let finalDueDate: Date = dueDate;
+                
+                // If actionItem is an object with assignee and date info
+                if (typeof actionItem === 'object' && actionItem !== null && 'task' in actionItem) {
+                    const structuredItem = actionItem as {
+                        task: string;
+                        assignedToName?: string;
+                        dueDate?: string;
+                        dueDateTime?: string;
+                    };
+                    
+                    // Find user ID if assignee is specified
+                    if (structuredItem.assignedToName) {
+                        assignedToId = await findUserByName(structuredItem.assignedToName);
+                    }
+                    
+                    // Use specified due date if available
+                    if (structuredItem.dueDateTime) {
+                        finalDueDate = new Date(structuredItem.dueDateTime);
+                    } else if (structuredItem.dueDate) {
+                        finalDueDate = new Date(structuredItem.dueDate);
+                    }
+                    
+                    const taskTitle = structuredItem.task.length > 100 ? 
+                        structuredItem.task.substring(0, 97) + '...' : 
+                        structuredItem.task;
+                    
+                    tasks.push(new Task({
+                        title: taskTitle,
+                        description: `Task created from meeting: "${savedMeeting.title}"\n\nOriginal action item: ${structuredItem.task}${structuredItem.assignedToName ? `\nAssigned to: ${structuredItem.assignedToName}` : ''}`,
+                        priority: 'medium',
+                        dueDate: finalDueDate,
+                        assignedTo: assignedToId ? new mongoose.Types.ObjectId(assignedToId) : null,
+                        isPrivate: false,
+                        createdBy: new mongoose.Types.ObjectId(session.scheduledBy),
+                        status: 'pending',
+                        source: 'meeting',
+                        sourceMeetingId: savedMeeting._id
+                    }));
+                } else {
+                    // Fallback for simple string action items
+                    const actionItemString = typeof actionItem === 'string' ? actionItem : String(actionItem);
+                    const taskTitle = actionItemString.length > 100 ? 
+                        actionItemString.substring(0, 97) + '...' : 
+                        actionItemString;
+                    
+                    tasks.push(new Task({
+                        title: taskTitle,
+                        description: `Task created from meeting: "${savedMeeting.title}"\n\nOriginal action item: ${actionItemString}`,
+                        priority: 'medium',
+                        dueDate: finalDueDate,
+                        assignedTo: null,
+                        isPrivate: false,
+                        createdBy: new mongoose.Types.ObjectId(session.scheduledBy),
+                        status: 'pending',
+                        source: 'meeting',
+                        sourceMeetingId: savedMeeting._id
+                    }));
+                }
+            }
+
+            await Task.insertMany(tasks);
+        }
     } catch (error) {
         console.error('Error processing transcript:', error);
         

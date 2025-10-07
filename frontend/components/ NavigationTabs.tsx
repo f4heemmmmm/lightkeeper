@@ -1,6 +1,12 @@
 import { useRouter } from "next/router";
 
-type PageType = "tasks" | "meetings" | "notetaker" | "calendar" | "upcoming" | "event-designer";
+type PageType =
+    | "tasks"
+    | "meetings"
+    | "notetaker"
+    | "calendar"
+    | "upcoming"
+    | "event-designer";
 
 interface NavigationTabsProps {
     currentPage: PageType;

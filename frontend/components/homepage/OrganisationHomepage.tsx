@@ -103,21 +103,17 @@ export default function OrganisationHomepage({
         const sorted = [...tasksToSort];
 
         if (sortBy === "dueDate-asc") {
-            sorted.sort(
-                (a, b) => {
-                    const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-                    const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-                    return dateA - dateB;
-                }
-            );
+            sorted.sort((a, b) => {
+                const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                return dateA - dateB;
+            });
         } else if (sortBy === "dueDate-desc") {
-            sorted.sort(
-                (a, b) => {
-                    const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-                    const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-                    return dateB - dateA;
-                }
-            );
+            sorted.sort((a, b) => {
+                const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                return dateB - dateA;
+            });
         }
 
         return sorted;
@@ -521,23 +517,23 @@ export default function OrganisationHomepage({
                 {/* Task Columns */}
                 <div className="px-8 py-8">
                     <div className="flex gap-6 h-[calc(100vh-280px)] min-h-[400px]">
-                    {/* Left Column - All Tasks */}
-                    <div
-                        className={`w-1/2 bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col transition-colors ${
-                            dragOverZone === "pending"
-                                ? "border-blue-400 bg-blue-500/10"
-                                : ""
-                        }`}
-                        onDragOver={(e) => handleDragOver(e, "pending")}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleDrop(e, "pending")}
-                    >
-                        <div className="px-6 py-4 border-b border-white/10">
-                            <h2 className="text-xl font-medium">
-                                All Tasks ({allTasks.length})
-                            </h2>
-                        </div>
-                        <div className="flex-1 overflow-y-auto">
+                        {/* Left Column - All Tasks */}
+                        <div
+                            className={`w-1/2 bg-white/5 border border-white/10 rounded-lg overflow-hidden flex flex-col transition-colors ${
+                                dragOverZone === "pending"
+                                    ? "border-blue-400 bg-blue-500/10"
+                                    : ""
+                            }`}
+                            onDragOver={(e) => handleDragOver(e, "pending")}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, "pending")}
+                        >
+                            <div className="px-6 py-4 border-b border-white/10">
+                                <h2 className="text-xl font-medium">
+                                    All Tasks ({allTasks.length})
+                                </h2>
+                            </div>
+                            <div className="flex-1 overflow-y-auto">
                                 {isLoading ? (
                                     <div className="text-center py-12 text-gray-400">
                                         Loading tasks...
@@ -555,7 +551,8 @@ export default function OrganisationHomepage({
                                             <div
                                                 key={task._id}
                                                 className={`p-4 cursor-pointer hover:bg-white/5 transition-colors ${
-                                                    draggedTask?._id === task._id
+                                                    draggedTask?._id ===
+                                                    task._id
                                                         ? "opacity-50"
                                                         : ""
                                                 }`}
@@ -591,14 +588,17 @@ export default function OrganisationHomepage({
                                                             {task.title}
                                                         </h3>
                                                         <div className="flex flex-wrap gap-3 text-xs">
-                                                            {task.dueDate && formatDateTime(task.dueDate) && (
-                                                                <span className="text-gray-400">
-                                                                    Due:{" "}
-                                                                    {formatDateTime(
-                                                                        task.dueDate
-                                                                    )}
-                                                                </span>
-                                                            )}
+                                                            {task.dueDate &&
+                                                                formatDateTime(
+                                                                    task.dueDate
+                                                                ) && (
+                                                                    <span className="text-gray-400">
+                                                                        Due:{" "}
+                                                                        {formatDateTime(
+                                                                            task.dueDate
+                                                                        )}
+                                                                    </span>
+                                                                )}
                                                             <span
                                                                 className={getPriorityColor(
                                                                     task.priority
@@ -658,7 +658,8 @@ export default function OrganisationHomepage({
                                             <div
                                                 key={task._id}
                                                 className={`p-4 cursor-pointer hover:bg-white/5 transition-colors ${
-                                                    draggedTask?._id === task._id
+                                                    draggedTask?._id ===
+                                                    task._id
                                                         ? "opacity-50"
                                                         : ""
                                                 }`}
@@ -678,14 +679,17 @@ export default function OrganisationHomepage({
                                                             {task.title}
                                                         </h3>
                                                         <div className="flex flex-wrap gap-3 text-xs">
-                                                            {task.dueDate && formatDateTime(task.dueDate) && (
-                                                                <span className="text-gray-500">
-                                                                    Due:{" "}
-                                                                    {formatDateTime(
-                                                                        task.dueDate
-                                                                    )}
-                                                                </span>
-                                                            )}
+                                                            {task.dueDate &&
+                                                                formatDateTime(
+                                                                    task.dueDate
+                                                                ) && (
+                                                                    <span className="text-gray-500">
+                                                                        Due:{" "}
+                                                                        {formatDateTime(
+                                                                            task.dueDate
+                                                                        )}
+                                                                    </span>
+                                                                )}
                                                             <span
                                                                 className={getPriorityColor(
                                                                     task.priority
@@ -729,7 +733,7 @@ export default function OrganisationHomepage({
             </div>
 
             {/* Floating Action Button */}
-            <div className="fixed bottom-8 right-8 flex flex-col gap-3">
+            <div className="fixed bottom-10 right-14 flex flex-col gap-3">
                 <button
                     onClick={() => setIsModalOpen(true)}
                     className="bg-white text-black p-4 rounded-full shadow-lg hover:bg-gray-100 transition-colors flex items-center justify-center group"

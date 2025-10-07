@@ -82,11 +82,16 @@ export default function MeetingsPage() {
     const [isMigrating, setIsMigrating] = useState(false);
     const [isLoadingContent, setIsLoadingContent] = useState(false);
     const [searchQuery, setSearchQuery] = useState<string>("");
-    const [translatedMeetings, setTranslatedMeetings] = useState<Map<string, Meeting>>(new Map());
-    const [translationMetadata, setTranslationMetadata] = useState<Map<string, { sourceLanguage: string; targetLanguage: string }>>(new Map());
+    const [translatedMeetings, setTranslatedMeetings] = useState<
+        Map<string, Meeting>
+    >(new Map());
+    const [translationMetadata, setTranslationMetadata] = useState<
+        Map<string, { sourceLanguage: string; targetLanguage: string }>
+    >(new Map());
     const [isTranslating, setIsTranslating] = useState<string | null>(null);
     const [showTranslationModal, setShowTranslationModal] = useState(false);
-    const [translationTargetMeetingId, setTranslationTargetMeetingId] = useState<string | null>(null);
+    const [translationTargetMeetingId, setTranslationTargetMeetingId] =
+        useState<string | null>(null);
     const [targetLanguage, setTargetLanguage] = useState<string>("English");
 
     const getAuthHeader = (): Record<string, string> => {
@@ -180,7 +185,7 @@ export default function MeetingsPage() {
                     fileUrl: dataUrl,
                     fileName: selectedFile.name,
                     fileSize: selectedFile.size,
-                    fileContent: dataUrl, // Send the same base64 data URL
+                    fileContent: dataUrl,
                 },
                 { headers: getAuthHeader() }
             );
@@ -192,8 +197,23 @@ export default function MeetingsPage() {
             showToast("Meeting notes uploaded successfully!", "success");
         } catch (err) {
             const axiosError = err as AxiosError<ErrorResponse>;
-            const errorMessage = axiosError.response?.data?.message || "Failed to upload meeting";
-            showToast(errorMessage, "error");
+
+            if (axiosError.response?.status === 409) {
+                const duplicateData = axiosError.response.data as any;
+                showToast(
+                    `File already uploaded: "${
+                        duplicateData.existingMeeting?.title
+                    }" on ${new Date(
+                        duplicateData.existingMeeting?.uploadedAt
+                    ).toLocaleDateString()}`,
+                    "warning"
+                );
+            } else {
+                const errorMessage =
+                    axiosError.response?.data?.message ||
+                    "Failed to upload meeting";
+                showToast(errorMessage, "error");
+            }
             console.error("Error uploading meeting:", err);
         } finally {
             setIsUploading(false);
@@ -257,7 +277,9 @@ export default function MeetingsPage() {
             showToast("Meeting deleted successfully", "success");
         } catch (err) {
             const axiosError = err as AxiosError<ErrorResponse>;
-            const errorMessage = axiosError.response?.data?.message || "Failed to delete meeting";
+            const errorMessage =
+                axiosError.response?.data?.message ||
+                "Failed to delete meeting";
             showToast(errorMessage, "error");
             console.error("Error deleting meeting:", err);
         }
@@ -281,15 +303,25 @@ export default function MeetingsPage() {
             );
 
             const result = response.data;
-            alert(
-                `Migration completed!\n\nCreated ${result.totalTasksCreated} tasks from ${result.meetingsProcessed} meetings.`
-            );
+
+            if (result.totalTasksCreated > 0) {
+                showToast(
+                    `Migration completed! Created ${result.totalTasksCreated} tasks from ${result.meetingsProcessed} meetings.`,
+                    "success"
+                );
+            } else {
+                showToast(
+                    "No new tasks were created - all meetings have already been migrated.",
+                    "info"
+                );
+            }
+
             fetchMeetings();
         } catch (err) {
             const axiosError = err as AxiosError<ErrorResponse>;
-            setError(
-                axiosError.response?.data?.message || "Failed to migrate tasks"
-            );
+            const errorMessage =
+                axiosError.response?.data?.message || "Failed to migrate tasks";
+            showToast(errorMessage, "error");
             console.error("Error migrating tasks:", err);
         } finally {
             setIsMigrating(false);
@@ -314,7 +346,10 @@ export default function MeetingsPage() {
         });
     };
 
-    const handleTranslateMeeting = async (meetingId: string, language: string): Promise<void> => {
+    const handleTranslateMeeting = async (
+        meetingId: string,
+        language: string
+    ): Promise<void> => {
         setIsTranslating(meetingId);
         try {
             const response = await axios.post(
@@ -326,9 +361,9 @@ export default function MeetingsPage() {
             );
 
             const translationData = response.data.translation;
-            
+
             // Create a translated version of the meeting
-            const originalMeeting = meetings.find(m => m._id === meetingId);
+            const originalMeeting = meetings.find((m) => m._id === meetingId);
             if (originalMeeting) {
                 const translatedMeeting: Meeting = {
                     ...originalMeeting,
@@ -338,14 +373,18 @@ export default function MeetingsPage() {
                     actionItems: translationData.actionItems,
                     translatedFrom: translationData.detectedSourceLanguage,
                 };
-                
+
                 // Store the translation and metadata
-                setTranslatedMeetings(prev => new Map(prev).set(meetingId, translatedMeeting));
-                setTranslationMetadata(prev => new Map(prev).set(meetingId, {
-                    sourceLanguage: translationData.detectedSourceLanguage,
-                    targetLanguage: translationData.targetLanguage
-                }));
-                
+                setTranslatedMeetings((prev) =>
+                    new Map(prev).set(meetingId, translatedMeeting)
+                );
+                setTranslationMetadata((prev) =>
+                    new Map(prev).set(meetingId, {
+                        sourceLanguage: translationData.detectedSourceLanguage,
+                        targetLanguage: translationData.targetLanguage,
+                    })
+                );
+
                 showToast(
                     `Translation completed! Translated from ${translationData.detectedSourceLanguage} to ${translationData.targetLanguage}`,
                     "success"
@@ -357,7 +396,9 @@ export default function MeetingsPage() {
             setError(null);
         } catch (err) {
             const axiosError = err as AxiosError<ErrorResponse>;
-            const errorMessage = axiosError.response?.data?.message || "Failed to translate meeting";
+            const errorMessage =
+                axiosError.response?.data?.message ||
+                "Failed to translate meeting";
             showToast(errorMessage, "error");
             console.error("Error translating meeting:", err);
         } finally {
@@ -368,16 +409,19 @@ export default function MeetingsPage() {
     };
 
     const getMeetingToDisplay = (meetingId: string): Meeting => {
-        return translatedMeetings.get(meetingId) || meetings.find(m => m._id === meetingId)!;
+        return (
+            translatedMeetings.get(meetingId) ||
+            meetings.find((m) => m._id === meetingId)!
+        );
     };
 
     const clearTranslation = (meetingId: string): void => {
-        setTranslatedMeetings(prev => {
+        setTranslatedMeetings((prev) => {
             const newMap = new Map(prev);
             newMap.delete(meetingId);
             return newMap;
         });
-        setTranslationMetadata(prev => {
+        setTranslationMetadata((prev) => {
             const newMap = new Map(prev);
             newMap.delete(meetingId);
             return newMap;
@@ -443,16 +487,30 @@ export default function MeetingsPage() {
                     <div className="px-6 py-4 border-b border-white/10">
                         <div className="flex items-center justify-between gap-4 mb-4">
                             <h2 className="text-xl font-medium">
-                                Meeting Notes ({meetings.filter(meeting => {
-                                    if (!searchQuery.trim()) return true;
-                                    const query = searchQuery.toLowerCase();
-                                    return (
-                                        meeting.title.toLowerCase().includes(query) ||
-                                        meeting.description?.toLowerCase().includes(query) ||
-                                        meeting.summary?.toLowerCase().includes(query) ||
-                                        meeting.tags?.some(tag => tag.toLowerCase().includes(query))
-                                    );
-                                }).length})
+                                Meeting Notes (
+                                {
+                                    meetings.filter((meeting) => {
+                                        if (!searchQuery.trim()) return true;
+                                        const query = searchQuery.toLowerCase();
+                                        return (
+                                            meeting.title
+                                                .toLowerCase()
+                                                .includes(query) ||
+                                            meeting.description
+                                                ?.toLowerCase()
+                                                .includes(query) ||
+                                            meeting.summary
+                                                ?.toLowerCase()
+                                                .includes(query) ||
+                                            meeting.tags?.some((tag) =>
+                                                tag
+                                                    .toLowerCase()
+                                                    .includes(query)
+                                            )
+                                        );
+                                    }).length
+                                }
+                                )
                             </h2>
                         </div>
                         {/* Search Bar */}
@@ -480,138 +538,201 @@ export default function MeetingsPage() {
                             <div className="text-center py-12 text-gray-400">
                                 Loading meetings...
                             </div>
-                        ) : meetings.filter(meeting => {
-                            if (!searchQuery.trim()) return true;
-                            const query = searchQuery.toLowerCase();
-                            return (
-                                meeting.title.toLowerCase().includes(query) ||
-                                meeting.description?.toLowerCase().includes(query) ||
-                                meeting.summary?.toLowerCase().includes(query) ||
-                                meeting.tags?.some(tag => tag.toLowerCase().includes(query))
-                            );
-                        }).length === 0 ? (
+                        ) : meetings.filter((meeting) => {
+                              if (!searchQuery.trim()) return true;
+                              const query = searchQuery.toLowerCase();
+                              return (
+                                  meeting.title.toLowerCase().includes(query) ||
+                                  meeting.description
+                                      ?.toLowerCase()
+                                      .includes(query) ||
+                                  meeting.summary
+                                      ?.toLowerCase()
+                                      .includes(query) ||
+                                  meeting.tags?.some((tag) =>
+                                      tag.toLowerCase().includes(query)
+                                  )
+                              );
+                          }).length === 0 ? (
                             <div className="text-center py-12 text-gray-400">
                                 <p>
-                                    {searchQuery ? `No meetings found matching "${searchQuery}"` : "No meetings yet. Upload your first meeting notes."}
+                                    {searchQuery
+                                        ? `No meetings found matching "${searchQuery}"`
+                                        : "No meetings yet. Upload your first meeting notes."}
                                 </p>
                             </div>
                         ) : (
                             <div className="divide-y divide-white/10">
-                                {meetings.filter(meeting => {
-                                    if (!searchQuery.trim()) return true;
-                                    const query = searchQuery.toLowerCase();
-                                    return (
-                                        meeting.title.toLowerCase().includes(query) ||
-                                        meeting.description?.toLowerCase().includes(query) ||
-                                        meeting.summary?.toLowerCase().includes(query) ||
-                                        meeting.tags?.some(tag => tag.toLowerCase().includes(query))
-                                    );
-                                }).map((meeting) => {
-                                    const displayMeeting = getMeetingToDisplay(meeting._id);
-                                    const isTranslated = translatedMeetings.has(meeting._id);
-                                    const translationMeta = translationMetadata.get(meeting._id);
-                                    
-                                    return (
-                                    <div
-                                        key={meeting._id}
-                                        className="p-4 cursor-pointer hover:bg-white/5 transition-colors"
-                                        onClick={() =>
-                                            handleMeetingClick(displayMeeting)
-                                        }
-                                    >
-                                        <div className="flex items-start gap-4">
-                                            <FileText className="w-5 h-5 text-blue-400 flex-shrink-0 mt-1" />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <h3 className="text-base font-medium">
-                                                        {displayMeeting.title}
-                                                    </h3>
-                                                </div>
-                                                {isTranslated && translationMeta ? (
-                                                    <p className="text-xs text-gray-500 mb-2">
-                                                        Translated from {translationMeta.sourceLanguage}
-                                                    </p>
-                                                ) : (
-                                                    <p className="text-xs text-gray-500 mb-2">
-                                                        Original Transcript
-                                                    </p>
-                                                )}
-                                                {displayMeeting.tags && displayMeeting.tags.length > 0 && (
-                                                    <div className="flex flex-wrap gap-2 mb-3">
-                                                        {displayMeeting.tags.map((tag, index) => (
-                                                            <span
-                                                                key={index}
-                                                                className="inline-flex items-center gap-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-xs"
-                                                            >
-                                                                <Tag className="w-3 h-3" />
-                                                                {tag}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                <div className="flex flex-wrap gap-3 text-xs text-gray-400">
-                                                    <span>
-                                                        {displayMeeting.fileName}
-                                                    </span>
-                                                    <span>
-                                                        {formatFileSize(
-                                                            displayMeeting.fileSize
-                                                        )}
-                                                    </span>
-                                                    <span>
-                                                        Uploaded by{" "}
-                                                        {displayMeeting.uploaderName}
-                                                    </span>
-                                                    <span>
-                                                        {formatDateTime(
-                                                            displayMeeting.createdAt
-                                                        )}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2 flex-shrink-0 mt-1">
-                                                {isTranslated ? (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            clearTranslation(meeting._id);
-                                                        }}
-                                                        className="p-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-colors"
-                                                        title="Show original"
-                                                    >
-                                                        <RotateCcw className="w-4 h-4" />
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setTranslationTargetMeetingId(meeting._id);
-                                                            setShowTranslationModal(true);
-                                                        }}
-                                                        className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
-                                                        title="Translate"
-                                                        disabled={isTranslating === meeting._id}
-                                                    >
-                                                        {isTranslating === meeting._id ? (
-                                                            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                                {meetings
+                                    .filter((meeting) => {
+                                        if (!searchQuery.trim()) return true;
+                                        const query = searchQuery.toLowerCase();
+                                        return (
+                                            meeting.title
+                                                .toLowerCase()
+                                                .includes(query) ||
+                                            meeting.description
+                                                ?.toLowerCase()
+                                                .includes(query) ||
+                                            meeting.summary
+                                                ?.toLowerCase()
+                                                .includes(query) ||
+                                            meeting.tags?.some((tag) =>
+                                                tag
+                                                    .toLowerCase()
+                                                    .includes(query)
+                                            )
+                                        );
+                                    })
+                                    .map((meeting) => {
+                                        const displayMeeting =
+                                            getMeetingToDisplay(meeting._id);
+                                        const isTranslated =
+                                            translatedMeetings.has(meeting._id);
+                                        const translationMeta =
+                                            translationMetadata.get(
+                                                meeting._id
+                                            );
+
+                                        return (
+                                            <div
+                                                key={meeting._id}
+                                                className="p-4 cursor-pointer hover:bg-white/5 transition-colors"
+                                                onClick={() =>
+                                                    handleMeetingClick(
+                                                        displayMeeting
+                                                    )
+                                                }
+                                            >
+                                                <div className="flex items-start gap-4">
+                                                    <FileText className="w-5 h-5 text-blue-400 flex-shrink-0 mt-1" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h3 className="text-base font-medium">
+                                                                {
+                                                                    displayMeeting.title
+                                                                }
+                                                            </h3>
+                                                        </div>
+                                                        {isTranslated &&
+                                                        translationMeta ? (
+                                                            <p className="text-xs text-gray-500 mb-2">
+                                                                Translated from{" "}
+                                                                {
+                                                                    translationMeta.sourceLanguage
+                                                                }
+                                                            </p>
                                                         ) : (
-                                                            <Languages className="w-4 h-4" />
+                                                            <p className="text-xs text-gray-500 mb-2">
+                                                                Original
+                                                                Transcript
+                                                            </p>
                                                         )}
-                                                    </button>
-                                                )}
-                                                <ChevronRight className="w-5 h-5 text-gray-400" />
+                                                        {displayMeeting.tags &&
+                                                            displayMeeting.tags
+                                                                .length > 0 && (
+                                                                <div className="flex flex-wrap gap-2 mb-3">
+                                                                    {displayMeeting.tags.map(
+                                                                        (
+                                                                            tag,
+                                                                            index
+                                                                        ) => (
+                                                                            <span
+                                                                                key={
+                                                                                    index
+                                                                                }
+                                                                                className="inline-flex items-center gap-1 bg-blue-500/10 border border-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-xs"
+                                                                            >
+                                                                                <Tag className="w-3 h-3" />
+                                                                                {
+                                                                                    tag
+                                                                                }
+                                                                            </span>
+                                                                        )
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+                                                            <span>
+                                                                {
+                                                                    displayMeeting.fileName
+                                                                }
+                                                            </span>
+                                                            <span>
+                                                                {formatFileSize(
+                                                                    displayMeeting.fileSize
+                                                                )}
+                                                            </span>
+                                                            <span>
+                                                                Uploaded by{" "}
+                                                                {
+                                                                    displayMeeting.uploaderName
+                                                                }
+                                                            </span>
+                                                            <span>
+                                                                {formatDateTime(
+                                                                    displayMeeting.createdAt
+                                                                )}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 flex-shrink-0 mt-1">
+                                                        {isTranslated ? (
+                                                            <button
+                                                                onClick={(
+                                                                    e
+                                                                ) => {
+                                                                    e.stopPropagation();
+                                                                    clearTranslation(
+                                                                        meeting._id
+                                                                    );
+                                                                }}
+                                                                className="p-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-colors"
+                                                                title="Show original"
+                                                            >
+                                                                <RotateCcw className="w-4 h-4" />
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={(
+                                                                    e
+                                                                ) => {
+                                                                    e.stopPropagation();
+                                                                    setTranslationTargetMeetingId(
+                                                                        meeting._id
+                                                                    );
+                                                                    setShowTranslationModal(
+                                                                        true
+                                                                    );
+                                                                }}
+                                                                className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+                                                                title="Translate"
+                                                                disabled={
+                                                                    isTranslating ===
+                                                                    meeting._id
+                                                                }
+                                                            >
+                                                                {isTranslating ===
+                                                                meeting._id ? (
+                                                                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                                                                ) : (
+                                                                    <Languages className="w-4 h-4" />
+                                                                )}
+                                                            </button>
+                                                        )}
+                                                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                    );
-                                })}
+                                        );
+                                    })}
                             </div>
                         )}
                     </div>
                 </div>
             </div>
 
-            <div className="fixed bottom-8 right-8">
+            <div className="fixed bottom-10 right-14">
                 <button
                     onClick={() => setShowUploadModal(true)}
                     className="bg-white text-black p-4 rounded-full shadow-lg hover:bg-gray-100 transition-colors flex items-center justify-center group"
@@ -772,7 +893,9 @@ export default function MeetingsPage() {
                             </p>
                             <select
                                 value={targetLanguage}
-                                onChange={(e) => setTargetLanguage(e.target.value)}
+                                onChange={(e) =>
+                                    setTargetLanguage(e.target.value)
+                                }
                                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-white/20 mb-4"
                             >
                                 <option value="English">English</option>
@@ -797,7 +920,9 @@ export default function MeetingsPage() {
                                 <option value="Danish">Danish</option>
                             </select>
                             <p className="text-xs text-gray-500 mb-4">
-                                The translation will be powered by GPT-4o and will preserve the meaning and context of your meeting notes.
+                                The translation will be powered by GPT-4o and
+                                will preserve the meaning and context of your
+                                meeting notes.
                             </p>
                         </div>
                         <div className="flex gap-3 px-6 pb-6">
@@ -811,7 +936,12 @@ export default function MeetingsPage() {
                                 Cancel
                             </button>
                             <button
-                                onClick={() => handleTranslateMeeting(translationTargetMeetingId, targetLanguage)}
+                                onClick={() =>
+                                    handleTranslateMeeting(
+                                        translationTargetMeetingId,
+                                        targetLanguage
+                                    )
+                                }
                                 disabled={isTranslating !== null}
                                 className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >

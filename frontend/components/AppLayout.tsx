@@ -10,7 +10,13 @@ interface User {
     role: "organisation" | "member";
 }
 
-type PageType = "tasks" | "meetings" | "notetaker" | "calendar" | "upcoming" | "event-designer";
+type PageType =
+    | "tasks"
+    | "meetings"
+    | "notetaker"
+    | "calendar"
+    | "upcoming"
+    | "event-designer";
 
 interface AppLayoutProps {
     user: User;
@@ -31,32 +37,11 @@ export default function AppLayout({
         router.push("/login");
     };
 
-    const getPageTitle = (): string => {
-        switch (currentPage) {
-            case "tasks":
-                return user.role === "organisation"
-                    ? "Organisation Dashboard - Manage all tasks"
-                    : "Member Dashboard - Your assigned tasks";
-            case "meetings":
-                return "Meetings - Upload and manage meeting notes";
-            case "notetaker":
-                return "AI Notetaker - Automatically join and transcribe meetings";
-            case "calendar":
-                return "Calendar - View your schedule";
-            case "upcoming":
-                return "Upcoming Events - See what's next";
-            case "event-designer":
-                return "Event Designer - Create and customize events";
-            default:
-                return "";
-        }
-    };
-
     return (
         <div className="min-h-screen bg-black text-white">
             <Header
                 user={user}
-                pageTitle={getPageTitle()}
+                pageTitle="Organize your workflow."
                 onLogout={handleLogout}
             />
             <NavigationTabs currentPage={currentPage} />

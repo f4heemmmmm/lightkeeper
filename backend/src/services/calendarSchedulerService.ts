@@ -1,4 +1,4 @@
-import { fetchCalendarEvents, NylasCalendarEvent } from './nylasService';
+import { fetchCalendarEvents, fetchCalendars, createCalendarEvent, NylasCalendarEvent } from './nylasService';
 import SyncedCalendarEvent from '../models/SyncedCalendarEvent';
 import Task from '../models/Task';
 import User from '../models/User';
@@ -289,5 +289,52 @@ export function startCalendarScheduler(): void {
 export async function manualSyncForUser(userId: string, grantId: string): Promise<SyncResult> {
     console.log(`[Calendar Sync] Manual sync requested for user: ${userId}`);
     return await syncCalendarEventsForUser(userId, grantId);
+}
+
+/**
+ * Sync a Lightkeeper task to Google Calendar
+ */
+export async function syncTaskToCalendar(task: any): Promise<void> {
+    try {
+        if (!NYLAS_GRANT_ID || !task.dueDate) return;
+
+        // Get primary calendar
+        const calendars = await fetchCalendars(NYLAS_GRANT_ID);
+        const primaryCalendar = calendars.find(cal => cal.is_primary) || calendars[0];
+        
+        if (!primaryCalendar) return;
+
+        // Check if already synced
+        const existingSync = await SyncedCalendarEvent.findOne({
+            taskId: task._id,
+            syncDirection: 'task_to_calendar'
+        });
+
+        if (existingSync) return;
+
+        // Create calendar event
+        const calendarEvent = await createCalendarEvent(NYLAS_GRANT_ID, primaryCalendar.id, {
+            title: `[Lightkeeper] ${task.title}`,
+            description: task.description,
+            startTime: task.dueDate,
+            endTime: new Date(task.dueDate.getTime() + 60 * 60 * 1000) // 1 hour duration
+        });
+
+        // Track the sync
+        await new SyncedCalendarEvent({
+            eventId: calendarEvent.id,
+            calendarId: primaryCalendar.id,
+            userId: task.createdBy,
+            grantId: NYLAS_GRANT_ID,
+            taskId: task._id,
+            eventTitle: task.title,
+            eventStartTime: task.dueDate,
+            syncDirection: 'task_to_calendar'
+        }).save();
+
+        console.log(`[Calendar Sync] Task synced to Google Calendar: ${task.title}`);
+    } catch (error: any) {
+        console.error('[Calendar Sync] Failed to sync task to calendar:', error.message);
+    }
 }
 

@@ -1,7 +1,10 @@
 import Meeting from '../models/Meeting';
 import Task from '../models/Task';
-import { Request, Response } from 'express'; 
+import User from '../models/User';
+import { Request, Response } from 'express';
 import { analyzeMeetingNotes, translateMeetingNotes } from '../services/openaiService';
+import crypto from 'crypto';
+import mongoose from 'mongoose';
 
 /**
  * Decode base64 content with proper UTF-8 handling
@@ -14,6 +17,84 @@ const decodeFileContent = (fileContent: string): string => {
     } catch (error) {
         console.error('Error decoding file content:', error);
         return fileContent;
+    }
+};
+
+/**
+ * Generate SHA-256 hash of file content
+ */
+const generateFileHash = (content: string): string => {
+    return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+};
+
+/**
+ * Check if a file with the same hash already exists
+ */
+const checkDuplicateFile = async (fileHash: string, userId: string): Promise<{ isDuplicate: boolean; existingMeeting?: any }> => {
+    const existingMeeting = await Meeting.findOne({ 
+        fileHash, 
+        uploadedBy: userId 
+    }).select('title fileName createdAt');
+    
+    return {
+        isDuplicate: !!existingMeeting,
+        existingMeeting
+    };
+};
+
+/**
+ * Get organization members for action item filtering
+ */
+async function getOrganizationMembers(): Promise<Array<{name: string, email: string}>> {
+    try {
+        const members = await User.find({ role: 'member' })
+            .select('name email')
+            .sort({ name: 1 });
+
+        return members.map(m => ({ name: m.name, email: m.email }));
+    } catch (error) {
+        console.error('[Meeting Controller] Error fetching organization members:', error);
+        return [];
+    }
+}
+
+/**
+ * Find user ID by name from organization members
+ */
+const findUserByName = async (assigneeName: string): Promise<string | null> => {
+    if (!assigneeName) return null;
+    
+    try {
+        const nameLower = assigneeName.toLowerCase().trim();
+        
+        // Find all members (not organization accounts)
+        const users = await User.find({ role: 'member' });
+        
+        // Try exact name match first
+        let matchedUser = users.find(user => 
+            user.name.toLowerCase() === nameLower
+        );
+        
+        // If no exact match, try partial matching
+        if (!matchedUser) {
+            matchedUser = users.find(user => {
+                const userNameLower = user.name.toLowerCase();
+                const userNameParts = userNameLower.split(' ');
+                const assigneeNameParts = nameLower.split(' ');
+                
+                // Check if any part of the assignee name matches any part of user name
+                return assigneeNameParts.some(assigneePart => 
+                    userNameParts.some(userPart => 
+                        userPart.includes(assigneePart) || assigneePart.includes(userPart)
+                    )
+                );
+            });
+        }
+        
+        return matchedUser ? (matchedUser._id as mongoose.Types.ObjectId).toString() : null;
+    } catch (error) {
+        console.error('Error finding user by name:', error);
+        return null;
     }
 };
 
@@ -63,13 +144,37 @@ export const createMeeting = async (req: Request, res: Response): Promise<void> 
             return;
         }
 
-        const decodedContent = fileContent.startsWith('data:') 
+        const decodedContent = fileContent.startsWith('data:')
             ? decodeFileContent(fileContent)
-            : fileContent; // Use raw content if not base64
-        let analysis;
+            : fileContent;
+
+        // Generate hash of the file content
+        const fileHash = generateFileHash(decodedContent);
         
+        // Check for duplicate files
+        const duplicateCheck = await checkDuplicateFile(fileHash, user.id);
+        if (duplicateCheck.isDuplicate) {
+            res.status(409).json({ 
+                message: 'This file has already been uploaded',
+                existingMeeting: {
+                    title: duplicateCheck.existingMeeting.title,
+                    fileName: duplicateCheck.existingMeeting.fileName,
+                    uploadedAt: duplicateCheck.existingMeeting.createdAt
+                }
+            });
+            return;
+        }
+
+        let analysis;
         try {
-            analysis = await analyzeMeetingNotes(decodedContent);
+            // Get organization members for action item filtering (only for organization accounts)
+            let organizationMembers: Array<{name: string, email: string}> = [];
+            if (user.role === 'organisation') {
+                organizationMembers = await getOrganizationMembers();
+                console.log(`[Meeting Analysis] Found ${organizationMembers.length} organization members for action item filtering`);
+            }
+
+            analysis = await analyzeMeetingNotes(decodedContent, organizationMembers);
         } catch (error) {
             console.error('Error analyzing meeting notes:', error);
             res.status(500).json({ message: 'Failed to analyze meeting notes with AI' });
@@ -86,6 +191,7 @@ export const createMeeting = async (req: Request, res: Response): Promise<void> 
             fileUrl,
             fileName,
             fileSize,
+            fileHash,
             uploadedBy: user.id,
             uploaderName: user.name
         });
@@ -93,46 +199,80 @@ export const createMeeting = async (req: Request, res: Response): Promise<void> 
         const savedMeeting = await newMeeting.save();
 
         // Automatically create tasks from action items
-        console.log('Action items from AI analysis:', analysis.actionItems);
-        console.log('Action items count:', analysis.actionItems?.length || 0);
-        
         if (analysis.actionItems && analysis.actionItems.length > 0) {
-            console.log('Creating tasks from action items:', analysis.actionItems.length);
+            const tasks = [];
             
-            const tasks = analysis.actionItems.map((actionItem, index) => {
-                console.log(`Processing action item ${index + 1}:`, actionItem);
-                
-                // Set due date to 7 days from now by default
+            for (const actionItem of analysis.actionItems) {
                 const dueDate = new Date();
-                dueDate.setDate(dueDate.getDate() + 7);
+                dueDate.setDate(dueDate.getDate() + 7); // Default 7 days
                 
-                const task = new Task({
-                    title: actionItem.length > 100 ? actionItem.substring(0, 97) + '...' : actionItem,
-                    description: `Task created from meeting: "${savedMeeting.title}"\n\nOriginal action item: ${actionItem}`,
-                    priority: 'medium',
-                    dueDate: dueDate,
-                    assignedTo: null,
-                    isPrivate: false,
-                    createdBy: user.id,
-                    status: 'pending'
-                });
+                let assignedToId: string | null = null;
+                let finalDueDate: Date = dueDate;
                 
-                console.log(`Created task object ${index + 1}:`, {
-                    title: task.title,
-                    description: task.description.substring(0, 100) + '...',
-                    createdBy: task.createdBy
-                });
-                
-                return task;
-            });
+                // If actionItem is an object with assignee and date info
+                if (typeof actionItem === 'object' && actionItem !== null && 'task' in actionItem) {
+                    const structuredItem = actionItem as {
+                        task: string;
+                        assignedToName?: string;
+                        dueDate?: string;
+                        dueDateTime?: string;
+                    };
+                    
+                    // Find user ID if assignee is specified
+                    if (structuredItem.assignedToName) {
+                        assignedToId = await findUserByName(structuredItem.assignedToName);
+                    }
+                    
+                    // Use specified due date if available
+                    if (structuredItem.dueDateTime) {
+                        finalDueDate = new Date(structuredItem.dueDateTime);
+                    } else if (structuredItem.dueDate) {
+                        finalDueDate = new Date(structuredItem.dueDate);
+                    }
+                    
+                    const taskTitle = structuredItem.task.length > 100 ? 
+                        structuredItem.task.substring(0, 97) + '...' : 
+                        structuredItem.task;
+                    
+                    tasks.push(new Task({
+                        title: taskTitle,
+                        description: `Task created from meeting: "${savedMeeting.title}"\n\nOriginal action item: ${structuredItem.task}${structuredItem.assignedToName ? `\nAssigned to: ${structuredItem.assignedToName}` : ''}`,
+                        priority: 'medium',
+                        dueDate: finalDueDate,
+                        assignedTo: assignedToId ? new mongoose.Types.ObjectId(assignedToId) : null,
+                        isPrivate: false,
+                        createdBy: new mongoose.Types.ObjectId(user.id),
+                        status: 'pending',
+                        source: 'meeting',
+                        sourceMeetingId: savedMeeting._id
+                    }));
+                } else {
+                    // Fallback for simple string action items
+                    const actionItemString = typeof actionItem === 'string' ? actionItem : String(actionItem);
+                    const taskTitle = actionItemString.length > 100 ? 
+                        actionItemString.substring(0, 97) + '...' : 
+                        actionItemString;
+                    
+                    tasks.push(new Task({
+                        title: taskTitle,
+                        description: `Task created from meeting: "${savedMeeting.title}"\n\nOriginal action item: ${actionItemString}`,
+                        priority: 'medium',
+                        dueDate: finalDueDate,
+                        assignedTo: null,
+                        isPrivate: false,
+                        createdBy: new mongoose.Types.ObjectId(user.id),
+                        status: 'pending',
+                        source: 'meeting',
+                        sourceMeetingId: savedMeeting._id
+                    }));
+                }
+            }
 
             try {
                 const createdTasks = await Task.insertMany(tasks);
                 console.log(`Successfully created ${createdTasks.length} tasks from action items`);
-                console.log('Created task IDs:', createdTasks.map((t: any) => t._id));
             } catch (taskError) {
                 console.error('Error creating tasks from action items:', taskError);
-                // Don't fail the meeting creation if task creation fails
             }
         }
 
@@ -154,7 +294,7 @@ export const createTasksFromExistingMeetings = async (req: Request, res: Respons
             return;
         }
 
-        // Find all meetings with action items that don't have corresponding tasks
+        // Find all meetings with action items (from both uploads and notetaker)
         const meetings = await Meeting.find({ 
             actionItems: { $exists: true, $ne: [] },
             uploadedBy: user.id 
@@ -167,31 +307,83 @@ export const createTasksFromExistingMeetings = async (req: Request, res: Respons
             if (meeting.actionItems && meeting.actionItems.length > 0) {
                 console.log(`Processing meeting: ${meeting.title} with ${meeting.actionItems.length} action items`);
                 
-                // Check if tasks already exist for this meeting
+                // Check if tasks already exist for this meeting using sourceMeetingId
                 const existingTasks = await Task.find({
-                    description: { $regex: `Task created from meeting: "${meeting.title}"` }
+                    sourceMeetingId: meeting._id
                 });
 
                 if (existingTasks.length > 0) {
-                    console.log(`Tasks already exist for meeting: ${meeting.title}`);
+                    console.log(`Tasks already migrated for meeting: ${meeting.title} (${existingTasks.length} tasks)`);
                     continue;
                 }
 
-                const tasks = meeting.actionItems.map((actionItem) => {
+                const tasks = [];
+                
+                for (const actionItem of meeting.actionItems) {
                     const dueDate = new Date();
-                    dueDate.setDate(dueDate.getDate() + 7);
+                    dueDate.setDate(dueDate.getDate() + 7); // Default 7 days
                     
-                    return new Task({
-                        title: actionItem.length > 100 ? actionItem.substring(0, 97) + '...' : actionItem,
-                        description: `Task created from meeting: "${meeting.title}"\n\nOriginal action item: ${actionItem}`,
-                        priority: 'medium',
-                        dueDate: dueDate,
-                        assignedTo: null,
-                        isPrivate: false,
-                        createdBy: user.id,
-                        status: 'pending'
-                    });
-                });
+                    let assignedToId: string | null = null;
+                    let finalDueDate: Date = dueDate;
+                    
+                    // If actionItem is an object with assignee and date info
+                    if (typeof actionItem === 'object' && actionItem !== null && 'task' in actionItem) {
+                        const structuredItem = actionItem as {
+                            task: string;
+                            assignedToName?: string;
+                            dueDate?: string;
+                            dueDateTime?: string;
+                        };
+                        
+                        // Find user ID if assignee is specified
+                        if (structuredItem.assignedToName) {
+                            assignedToId = await findUserByName(structuredItem.assignedToName);
+                        }
+                        
+                        // Use specified due date if available
+                        if (structuredItem.dueDateTime) {
+                            finalDueDate = new Date(structuredItem.dueDateTime);
+                        } else if (structuredItem.dueDate) {
+                            finalDueDate = new Date(structuredItem.dueDate);
+                        }
+                        
+                        const taskTitle = structuredItem.task.length > 100 ? 
+                            structuredItem.task.substring(0, 97) + '...' : 
+                            structuredItem.task;
+                        
+                        tasks.push(new Task({
+                            title: taskTitle,
+                            description: `Task created from meeting: "${meeting.title}"\n\nOriginal action item: ${structuredItem.task}${structuredItem.assignedToName ? `\nAssigned to: ${structuredItem.assignedToName}` : ''}`,
+                            priority: 'medium',
+                            dueDate: finalDueDate,
+                            assignedTo: assignedToId ? new mongoose.Types.ObjectId(assignedToId) : null,
+                            isPrivate: false,
+                            createdBy: new mongoose.Types.ObjectId(user.id),
+                            status: 'pending',
+                            source: 'meeting',
+                            sourceMeetingId: meeting._id
+                        }));
+                    } else {
+                        // Fallback for simple string action items
+                        const actionItemString = typeof actionItem === 'string' ? actionItem : String(actionItem);
+                        const taskTitle = actionItemString.length > 100 ? 
+                            actionItemString.substring(0, 97) + '...' : 
+                            actionItemString;
+                        
+                        tasks.push(new Task({
+                            title: taskTitle,
+                            description: `Task created from meeting: "${meeting.title}"\n\nOriginal action item: ${actionItemString}`,
+                            priority: 'medium',
+                            dueDate: finalDueDate,
+                            assignedTo: null,
+                            isPrivate: false,
+                            createdBy: new mongoose.Types.ObjectId(user.id),
+                            status: 'pending',
+                            source: 'meeting',
+                            sourceMeetingId: meeting._id
+                        }));
+                    }
+                }
 
                 try {
                     const createdTasks = await Task.insertMany(tasks);
@@ -257,7 +449,7 @@ export const updateMeeting = async (req: Request, res: Response): Promise<void> 
 };
 
 /**
- * Delete a meeting with authorization check
+ * Delete a meeting with authorization check and cascade delete related tasks
  */
 export const deleteMeeting = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -274,8 +466,17 @@ export const deleteMeeting = async (req: Request, res: Response): Promise<void> 
             return;
         }
 
+        // Delete all tasks related to this meeting
+        const deletedTasks = await Task.deleteMany({ sourceMeetingId: req.params.id });
+        console.log(`Deleted ${deletedTasks.deletedCount} tasks related to meeting ${req.params.id}`);
+
+        // Delete the meeting
         await Meeting.findByIdAndDelete(req.params.id);
-        res.status(200).json({ message: 'Meeting deleted successfully' });
+
+        res.status(200).json({
+            message: 'Meeting deleted successfully',
+            deletedTasksCount: deletedTasks.deletedCount
+        });
     } catch (error) {
         res.status(500).json({ message: 'Error deleting meeting', error });
     }
